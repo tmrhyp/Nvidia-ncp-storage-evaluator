@@ -984,6 +984,635 @@ function LoadTesting({partners}) {
   );
 }
 
+// ── SHARED SUBMISSION STORE (in-memory, simulates backend) ───────────────────
+const SUBMISSION_STORE = {
+  submissions: [
+    { id:"SUB-001", company:"Qumulo", contact:"alice@qumulo.com", category:"Scale-Out NAS", submitted:"2025-03-01", status:"under_review", assignee:"Sarah K.", score:null, trackingId:"NCP-2025-001",
+      form:{ throughput:"48", iops:"2.1", latency:"95", maxCapacity:"20", uptime:"99.99", durability:"11", encryption:true, soc2:true, fedRamp:false, gpuDirect:true, cuda:true, nccl:false, infiniband:true, priceTB:"220", egressCost:"0.08", supportTier:"Enterprise", nvidiaTier:"Silver", notes:"Strong SMB story, newer in HPC/AI space. RDMA support recently added." }},
+    { id:"SUB-002", company:"Pure Storage", contact:"bob@purestorage.com", category:"All-Flash Array", submitted:"2025-03-03", status:"scored", assignee:"Mike T.", score:8.1, trackingId:"NCP-2025-002",
+      form:{ throughput:"120", iops:"15", latency:"42", maxCapacity:"50", uptime:"99.9999", durability:"11", encryption:true, soc2:true, fedRamp:true, gpuDirect:true, cuda:true, nccl:true, infiniband:true, priceTB:"380", egressCost:"0.05", supportTier:"Premium", nvidiaTier:"Gold", notes:"Excellent flash performance. Strong enterprise presence. Cost premium." }},
+    { id:"SUB-003", company:"Cloudian", contact:"carol@cloudian.com", category:"Object Storage", submitted:"2025-03-05", status:"submitted", assignee:null, score:null, trackingId:"NCP-2025-003",
+      form:{ throughput:"22", iops:"0.8", latency:"210", maxCapacity:"500", uptime:"99.99", durability:"11", encryption:true, soc2:true, fedRamp:false, gpuDirect:false, cuda:false, nccl:false, infiniband:false, priceTB:"95", egressCost:"0.02", supportTier:"Standard", nvidiaTier:"None", notes:"Best-in-class S3 object storage. Not ideal for GPU-Direct workloads." }},
+    { id:"SUB-004", company:"VAST Data", contact:"dave@vastdata.com", category:"AI-Native Storage", submitted:"2025-03-06", status:"shortlisted", assignee:"Sarah K.", score:9.2, trackingId:"NCP-2025-004",
+      form:{ throughput:"200", iops:"8", latency:"38", maxCapacity:"100", uptime:"99.9999", durability:"11", encryption:true, soc2:true, fedRamp:false, gpuDirect:true, cuda:true, nccl:true, infiniband:true, priceTB:"290", egressCost:"0.06", supportTier:"Premium", nvidiaTier:"Platinum", notes:"Top-tier AI-native architecture. Leading benchmark results. Strong fit." }},
+  ],
+  nextId: 5,
+};
+
+const STATUS_CONFIG = {
+  submitted:    { label:"Submitted",     color:"#60A5FA", bg:"rgba(96,165,250,0.12)",  icon:"📥" },
+  under_review: { label:"Under Review",  color:"#FBBF24", bg:"rgba(251,191,36,0.12)",  icon:"🔍" },
+  scored:       { label:"Scored",        color:"#A78BFA", bg:"rgba(167,139,250,0.12)", icon:"⭐" },
+  shortlisted:  { label:"Shortlisted",   color:"#34D399", bg:"rgba(52,211,153,0.12)",  icon:"🏆" },
+  rejected:     { label:"Rejected",      color:"#F87171", bg:"rgba(248,113,113,0.12)", icon:"❌" },
+};
+
+const FORM_FIELDS = [
+  { section:"🏢 Company Information", fields:[
+    { id:"company",      label:"Company Name",          type:"text",     placeholder:"e.g. WekaFS Inc.",        required:true },
+    { id:"contact",      label:"Primary Contact Email", type:"email",    placeholder:"name@company.com",        required:true },
+    { id:"website",      label:"Company Website",       type:"text",     placeholder:"https://...",             required:false },
+    { id:"category",     label:"Storage Category",      type:"select",   options:["High-Performance Parallel FS","AI-Native Storage","Enterprise Hybrid Storage","HPC/AI Storage","Global Data Fabric","Object Storage","All-Flash Array","Scale-Out NAS","Other"], required:true },
+    { id:"founded",      label:"Founded / Funding Stage",type:"text",    placeholder:"e.g. 2014 / Series D",   required:false },
+    { id:"nvidiaTier",   label:"NVIDIA Partnership Tier",type:"select",  options:["None","Associate","Silver","Gold","Platinum"], required:true },
+  ]},
+  { section:"⚡ Performance Specs", fields:[
+    { id:"throughput",   label:"Max Sequential Throughput (GB/s)", type:"number", placeholder:"e.g. 120",  required:true },
+    { id:"iops",         label:"Max Random IOPS (millions)",       type:"number", placeholder:"e.g. 8.5",  required:true },
+    { id:"latency",      label:"Average Latency (µs)",             type:"number", placeholder:"e.g. 45",   required:true },
+    { id:"maxCapacity",  label:"Max Capacity (PB)",                type:"number", placeholder:"e.g. 50",   required:true },
+  ]},
+  { section:"✅ Certifications & Compatibility", fields:[
+    { id:"gpuDirect",    label:"GPU-Direct Storage Support",       type:"bool",   required:false },
+    { id:"cuda",         label:"CUDA Integration",                 type:"bool",   required:false },
+    { id:"nccl",         label:"NCCL Support",                    type:"bool",   required:false },
+    { id:"infiniband",   label:"InfiniBand / RoCE Support",        type:"bool",   required:false },
+    { id:"encryption",   label:"Encryption at Rest & In Transit",  type:"bool",   required:false },
+    { id:"soc2",         label:"SOC2 Type II Certified",           type:"bool",   required:false },
+    { id:"fedRamp",      label:"FedRAMP Authorized",               type:"bool",   required:false },
+  ]},
+  { section:"💰 Pricing", fields:[
+    { id:"priceTB",      label:"Price per TB/month (USD)",         type:"number", placeholder:"e.g. 250",  required:true },
+    { id:"egressCost",   label:"Egress Cost per GB (USD)",         type:"number", placeholder:"e.g. 0.05", required:false },
+    { id:"supportTier",  label:"Support Tier Included",            type:"select", options:["Community","Standard","Enterprise","Premium"], required:true },
+  ]},
+  { section:"📝 Additional Information", fields:[
+    { id:"uptime",       label:"Uptime SLA (%)",                   type:"number", placeholder:"e.g. 99.99", required:true },
+    { id:"durability",   label:"Data Durability (nines)",          type:"number", placeholder:"e.g. 11",    required:false },
+    { id:"notes",        label:"Executive Summary / Notes",        type:"textarea",placeholder:"Describe your storage solution, key differentiators, and why it fits NVIDIA DGX Cloud NCP requirements...", required:true },
+  ]},
+];
+
+// ── VENDOR SUBMISSION PORTAL ─────────────────────────────────────────────────
+
+function VendorPortal({onSubmit}) {
+  const emptyForm = () => Object.fromEntries(FORM_FIELDS.flatMap(s=>s.fields).map(f=>[f.id, f.type==="bool"?false:""]));
+  const [form, setForm] = useState(emptyForm());
+  const [step, setStep] = useState(0);
+  const [submitted, setSubmitted] = useState(null);
+  const [errors, setErrors] = useState({});
+
+  const totalSteps = FORM_FIELDS.length;
+  const currentSection = FORM_FIELDS[step];
+
+  const validate = () => {
+    const errs = {};
+    currentSection.fields.forEach(f => { if(f.required && f.type!=="bool" && !form[f.id]) errs[f.id] = "Required"; });
+    setErrors(errs);
+    return Object.keys(errs).length === 0;
+  };
+
+  const next = () => { if(validate()) setStep(s=>Math.min(s+1,totalSteps-1)); };
+  const back = () => { setStep(s=>Math.max(s-1,0)); setErrors({}); };
+
+  const submit = () => {
+    if(!validate()) return;
+    const id = `SUB-00${SUBMISSION_STORE.nextId++}`;
+    const trackingId = `NCP-2025-00${SUBMISSION_STORE.nextId}`;
+    const newSub = { id, company:form.company, contact:form.contact, category:form.category, submitted:new Date().toISOString().slice(0,10), status:"submitted", assignee:null, score:null, trackingId, form };
+    SUBMISSION_STORE.submissions.push(newSub);
+    onSubmit(newSub);
+    setSubmitted({id, trackingId});
+  };
+
+  const inp = (f) => {
+    const base = { width:"100%", background:"rgba(255,255,255,0.05)", border:`1px solid ${errors[f.id]?"#F87171":"rgba(255,255,255,0.12)"}`, borderRadius:8, padding:"10px 14px", color:"#F1F5F9", fontFamily:"'IBM Plex Mono',monospace", fontSize:12, boxSizing:"border-box", transition:"all 0.2s" };
+    if(f.type==="bool") return (
+      <div onClick={()=>setForm(p=>({...p,[f.id]:!p[f.id]}))} style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer",userSelect:"none"}}>
+        <div style={{width:20,height:20,borderRadius:5,border:`2px solid ${form[f.id]?"#34D399":"rgba(255,255,255,0.2)"}`,background:form[f.id]?"rgba(52,211,153,0.2)":"transparent",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,color:"#34D399",transition:"all 0.2s",flexShrink:0}}>{form[f.id]?"✓":""}</div>
+        <span style={{fontSize:12,color:"#CBD5E1"}}>{f.label}</span>
+      </div>
+    );
+    if(f.type==="select") return (
+      <select value={form[f.id]} onChange={e=>setForm(p=>({...p,[f.id]:e.target.value}))} style={{...base,appearance:"none",cursor:"pointer"}}>
+        <option value="">Select...</option>
+        {f.options.map(o=><option key={o} value={o}>{o}</option>)}
+      </select>
+    );
+    if(f.type==="textarea") return <textarea value={form[f.id]} onChange={e=>setForm(p=>({...p,[f.id]:e.target.value}))} placeholder={f.placeholder} rows={4} style={{...base,resize:"vertical"}}/>;
+    return <input type={f.type} value={form[f.id]} onChange={e=>setForm(p=>({...p,[f.id]:e.target.value}))} placeholder={f.placeholder} style={base}/>;
+  };
+
+  if(submitted) return (
+    <div className="page-enter" style={{maxWidth:600,margin:"60px auto",textAlign:"center"}}>
+      <div style={{fontSize:64,marginBottom:20}}>🎉</div>
+      <h1 style={{fontSize:24,fontWeight:900,color:"#34D399",fontFamily:"'Syne',sans-serif",marginBottom:12}}>Submission Received!</h1>
+      <p style={{fontSize:13,color:"#94A3B8",lineHeight:1.8,marginBottom:28}}>Thank you for submitting your storage solution for NVIDIA DGX Cloud NCP evaluation. Our team will review your submission and reach out within 5 business days.</p>
+      <div style={{background:"rgba(52,211,153,0.08)",border:"1px solid rgba(52,211,153,0.3)",borderRadius:14,padding:24,marginBottom:24}}>
+        <div style={{fontSize:10,color:"#64748B",letterSpacing:"0.15em",marginBottom:8}}>YOUR TRACKING ID</div>
+        <div style={{fontSize:28,fontWeight:900,color:"#34D399",fontFamily:"'Syne',sans-serif",letterSpacing:"0.1em"}}>{submitted.trackingId}</div>
+        <div style={{fontSize:11,color:"#94A3B8",marginTop:8}}>Save this ID to check your submission status</div>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:24}}>
+        {[["📥","Submitted","Today"],["🔍","Review","3-5 days"],["📊","Scored","1-2 weeks"]].map(([icon,label,time])=>(
+          <div key={label} style={{background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:10,padding:14}}>
+            <div style={{fontSize:22,marginBottom:6}}>{icon}</div>
+            <div style={{fontSize:11,fontWeight:700,color:"#E2E8F0"}}>{label}</div>
+            <div style={{fontSize:9,color:"#64748B",marginTop:3}}>{time}</div>
+          </div>
+        ))}
+      </div>
+      <button onClick={()=>{setSubmitted(null);setForm(emptyForm());setStep(0);}} style={{background:"linear-gradient(135deg,#00D4FF,#7C3AED)",border:"none",borderRadius:8,padding:"10px 24px",color:"#fff",fontFamily:"'IBM Plex Mono',monospace",fontSize:11,fontWeight:700,letterSpacing:"0.1em",cursor:"pointer",textTransform:"uppercase"}}>
+        Submit Another
+      </button>
+    </div>
+  );
+
+  return (
+    <div className="page-enter" style={{maxWidth:760,margin:"0 auto",display:"flex",flexDirection:"column",gap:22}}>
+      {/* Header */}
+      <div style={{textAlign:"center",paddingTop:8}}>
+        <div style={{display:"inline-flex",alignItems:"center",gap:8,background:"rgba(0,212,255,0.08)",border:"1px solid rgba(0,212,255,0.2)",borderRadius:20,padding:"5px 16px",marginBottom:14}}>
+          <span style={{fontSize:9,color:"#67E8F9",letterSpacing:"0.15em",fontWeight:700}}>NVIDIA DGX CLOUD · NCP STORAGE PARTNER PROGRAM</span>
+        </div>
+        <h1 style={{fontSize:22,fontWeight:900,color:"#F1F5F9",fontFamily:"'Syne',sans-serif",marginBottom:8}}>Storage Partner Submission Portal</h1>
+        <p style={{fontSize:12,color:"#94A3B8",lineHeight:1.7}}>Submit your storage solution for evaluation as an NVIDIA Cloud Partner (NCP).<br/>All submissions are reviewed by the NVIDIA DGX Cloud Storage Team.</p>
+      </div>
+
+      {/* Progress */}
+      <div style={{display:"flex",alignItems:"center",gap:0}}>
+        {FORM_FIELDS.map((s,i)=>(
+          <React.Fragment key={i}>
+            <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:5,flex:1}}>
+              <div style={{width:32,height:32,borderRadius:"50%",background:i<step?"#34D399":i===step?"linear-gradient(135deg,#00D4FF,#7C3AED)":"rgba(255,255,255,0.08)",border:`2px solid ${i<=step?"transparent":"rgba(255,255,255,0.12)"}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,color:i<step?"#0d1117":i===step?"#fff":"#475569",fontWeight:900,transition:"all 0.3s"}}>
+                {i<step?"✓":i+1}
+              </div>
+              <div style={{fontSize:8,color:i===step?"#67E8F9":i<step?"#34D399":"#475569",textAlign:"center",letterSpacing:"0.05em",fontWeight:i===step?700:400}}>{s.section.split(" ").slice(1).join(" ")}</div>
+            </div>
+            {i<FORM_FIELDS.length-1&&<div style={{height:2,flex:0.5,background:i<step?"#34D399":"rgba(255,255,255,0.08)",transition:"background 0.3s",marginBottom:20}}/>}
+          </React.Fragment>
+        ))}
+      </div>
+
+      {/* Form card */}
+      <div style={{background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:16,padding:28}}>
+        <div style={{fontSize:14,fontWeight:700,color:"#F1F5F9",marginBottom:20,fontFamily:"'Syne',sans-serif"}}>{currentSection.section}</div>
+        <div style={{display:"grid",gridTemplateColumns: currentSection.fields[0]?.type==="bool" ? "1fr 1fr" : "1fr 1fr",gap:16}}>
+          {currentSection.fields.map(f=>(
+            <div key={f.id} style={{gridColumn: f.type==="textarea"||(f.type!=="bool"&&currentSection.fields.length===1)?"1/-1":"auto"}}>
+              {f.type!=="bool"&&<label style={{fontSize:9,color:"#94A3B8",letterSpacing:"0.12em",display:"block",marginBottom:6,fontWeight:700,textTransform:"uppercase"}}>{f.label}{f.required&&<span style={{color:"#F87171"}}> *</span>}</label>}
+              {inp(f)}
+              {errors[f.id]&&<div style={{fontSize:9,color:"#F87171",marginTop:4}}>⚠ {errors[f.id]}</div>}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Nav buttons */}
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+        <button onClick={back} disabled={step===0} style={{padding:"9px 20px",borderRadius:8,border:"1px solid rgba(255,255,255,0.12)",background:"rgba(255,255,255,0.05)",color:step===0?"#334155":"#94A3B8",cursor:step===0?"not-allowed":"pointer",fontFamily:"inherit",fontSize:11,fontWeight:700,letterSpacing:"0.1em",textTransform:"uppercase",opacity:step===0?0.4:1}}>
+          ← Back
+        </button>
+        <span style={{fontSize:10,color:"#475569"}}>Step {step+1} of {totalSteps}</span>
+        {step<totalSteps-1
+          ? <button onClick={next} style={{padding:"9px 24px",borderRadius:8,border:"none",background:"linear-gradient(135deg,#00D4FF,#7C3AED)",color:"#fff",cursor:"pointer",fontFamily:"inherit",fontSize:11,fontWeight:700,letterSpacing:"0.1em",textTransform:"uppercase"}}>Continue →</button>
+          : <button onClick={submit} style={{padding:"9px 24px",borderRadius:8,border:"none",background:"linear-gradient(135deg,#34D399,#059669)",color:"#fff",cursor:"pointer",fontFamily:"inherit",fontSize:11,fontWeight:700,letterSpacing:"0.1em",textTransform:"uppercase",boxShadow:"0 0 20px rgba(52,211,153,0.3)"}}>🚀 Submit Application</button>
+        }
+      </div>
+    </div>
+  );
+}
+
+// ── REVIEW QUEUE ─────────────────────────────────────────────────────────────
+
+function ReviewQueue({submissions, onUpdateStatus, onSelectForScoring}) {
+  const [filterStatus, setFilterStatus] = useState("all");
+  const [selected, setSelected] = useState(null);
+
+  const filtered = submissions.filter(s=>filterStatus==="all"||s.status===filterStatus);
+  const counts = Object.fromEntries(Object.keys(STATUS_CONFIG).map(k=>[k, submissions.filter(s=>s.status===k).length]));
+
+  const statusFlow = ["submitted","under_review","scored","shortlisted","rejected"];
+
+  return (
+    <div className="page-enter" style={{display:"flex",flexDirection:"column",gap:20}}>
+      <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",flexWrap:"wrap",gap:12}}>
+        <div>
+          <h1 style={{fontSize:20,fontWeight:900,color:"#F1F5F9",fontFamily:"'Syne',sans-serif"}}>📋 Review Queue</h1>
+          <p style={{fontSize:11,color:"#94A3B8",marginTop:4}}>NVIDIA Storage Team · Submission Intake & Status Management</p>
+        </div>
+        <div style={{display:"flex",gap:8}}>
+          {["all",...Object.keys(STATUS_CONFIG)].map(s=>{
+            const cfg = STATUS_CONFIG[s];
+            const count = s==="all"?submissions.length:counts[s]||0;
+            return (
+              <button key={s} onClick={()=>setFilterStatus(s)} style={{padding:"6px 12px",borderRadius:7,border:`1px solid ${filterStatus===s?(cfg?.color||"#67E8F9")+"66":"rgba(255,255,255,0.1)"}`,background:filterStatus===s?(cfg?.color||"#67E8F9")+"18":"rgba(255,255,255,0.04)",color:filterStatus===s?(cfg?.color||"#67E8F9"):"#64748B",fontSize:9,fontWeight:700,cursor:"pointer",fontFamily:"inherit",letterSpacing:"0.08em",textTransform:"uppercase",transition:"all 0.2s"}}>
+                {s==="all"?"All":cfg?.icon} {s==="all"?"All":cfg?.label} ({count})
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Pipeline funnel */}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:10}}>
+        {Object.entries(STATUS_CONFIG).map(([key,cfg])=>(
+          <div key={key} style={{background:cfg.bg,border:`1px solid ${cfg.color}44`,borderRadius:10,padding:"14px 16px",textAlign:"center"}}>
+            <div style={{fontSize:22,marginBottom:6}}>{cfg.icon}</div>
+            <div style={{fontSize:22,fontWeight:900,color:cfg.color,fontFamily:"'Syne',sans-serif"}}>{counts[key]||0}</div>
+            <div style={{fontSize:9,color:cfg.color,letterSpacing:"0.1em",fontWeight:700,marginTop:2}}>{cfg.label.toUpperCase()}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Submission table */}
+      <div style={{background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:14,overflow:"hidden"}}>
+        <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
+          <thead>
+            <tr style={{background:"rgba(255,255,255,0.05)"}}>
+              {["Tracking ID","Company","Category","Submitted","Status","Assignee","Score","Actions"].map(h=>(
+                <th key={h} style={{padding:"12px 16px",textAlign:"left",fontSize:9,color:"#94A3B8",letterSpacing:"0.12em",fontWeight:700,borderBottom:"1px solid rgba(255,255,255,0.08)",textTransform:"uppercase"}}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.map((sub,ri)=>{
+              const cfg = STATUS_CONFIG[sub.status];
+              return (
+                <tr key={sub.id} style={{background:ri%2===0?"rgba(255,255,255,0.01)":"transparent",cursor:"pointer",transition:"background 0.15s"}}
+                  onMouseEnter={e=>e.currentTarget.style.background="rgba(255,255,255,0.04)"}
+                  onMouseLeave={e=>e.currentTarget.style.background=ri%2===0?"rgba(255,255,255,0.01)":"transparent"}>
+                  <td style={{padding:"12px 16px",borderBottom:"1px solid rgba(255,255,255,0.05)"}}>
+                    <span style={{fontSize:10,fontWeight:700,color:"#67E8F9"}}>{sub.trackingId}</span>
+                  </td>
+                  <td style={{padding:"12px 16px",borderBottom:"1px solid rgba(255,255,255,0.05)"}}>
+                    <div style={{fontWeight:700,color:"#F1F5F9",fontSize:12}}>{sub.company}</div>
+                    <div style={{fontSize:9,color:"#64748B",marginTop:2}}>{sub.contact}</div>
+                  </td>
+                  <td style={{padding:"12px 16px",borderBottom:"1px solid rgba(255,255,255,0.05)"}}>
+                    <span style={{fontSize:9,color:"#94A3B8"}}>{sub.category}</span>
+                  </td>
+                  <td style={{padding:"12px 16px",borderBottom:"1px solid rgba(255,255,255,0.05)"}}>
+                    <span style={{fontSize:10,color:"#64748B"}}>{sub.submitted}</span>
+                  </td>
+                  <td style={{padding:"12px 16px",borderBottom:"1px solid rgba(255,255,255,0.05)"}}>
+                    <span style={{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 9px",borderRadius:5,background:cfg.bg,border:`1px solid ${cfg.color}44`,fontSize:9,color:cfg.color,fontWeight:700}}>
+                      {cfg.icon} {cfg.label}
+                    </span>
+                  </td>
+                  <td style={{padding:"12px 16px",borderBottom:"1px solid rgba(255,255,255,0.05)"}}>
+                    <span style={{fontSize:10,color:sub.assignee?"#CBD5E1":"#475569"}}>{sub.assignee||"Unassigned"}</span>
+                  </td>
+                  <td style={{padding:"12px 16px",borderBottom:"1px solid rgba(255,255,255,0.05)"}}>
+                    {sub.score ? <span style={{fontSize:14,fontWeight:900,color:sub.score>=8.5?"#34D399":sub.score>=7?"#FBBF24":"#F87171",fontFamily:"'Syne',sans-serif"}}>{sub.score}</span> : <span style={{fontSize:10,color:"#334155"}}>—</span>}
+                  </td>
+                  <td style={{padding:"12px 16px",borderBottom:"1px solid rgba(255,255,255,0.05)"}}>
+                    <div style={{display:"flex",gap:6"}}>
+                      <select onChange={e=>{ if(e.target.value) onUpdateStatus(sub.id,e.target.value); e.target.value=""; }}
+                        style={{background:"rgba(255,255,255,0.06)",border:"1px solid rgba(255,255,255,0.12)",borderRadius:5,padding:"3px 6px",color:"#94A3B8",fontSize:9,cursor:"pointer",fontFamily:"inherit"}}>
+                        <option value="">Move to...</option>
+                        {statusFlow.filter(s=>s!==sub.status).map(s=><option key={s} value={s}>{STATUS_CONFIG[s].label}</option>)}
+                      </select>
+                      <button onClick={()=>onSelectForScoring(sub)} style={{padding:"3px 10px",borderRadius:5,border:"1px solid rgba(167,139,250,0.4)",background:"rgba(167,139,250,0.1)",color:"#A78BFA",fontSize:9,cursor:"pointer",fontFamily:"inherit",fontWeight:700}}>
+                        Score →
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+        {filtered.length===0&&<div style={{padding:40,textAlign:"center",color:"#475569",fontSize:12}}>No submissions in this status</div>}
+      </div>
+    </div>
+  );
+}
+
+// ── AI-ASSISTED SCORING ───────────────────────────────────────────────────────
+
+function AIScoring({submission, onSave, onBack}) {
+  const [aiRunning, setAiRunning] = useState(false);
+  const [aiDone, setAiDone] = useState(false);
+  const [aiLog, setAiLog] = useState([]);
+  const [scores, setScores] = useState(Object.fromEntries(EVALUATION_CRITERIA.map(c=>[c.id,0])));
+  const [reviewerNotes, setReviewerNotes] = useState("");
+  const [confidence, setConfidence] = useState({});
+
+  if(!submission) return (
+    <div className="page-enter" style={{textAlign:"center",padding:60}}>
+      <div style={{fontSize:48,marginBottom:16}}>🎯</div>
+      <div style={{fontSize:14,color:"#94A3B8",marginBottom:20}}>Select a submission from the Review Queue to score</div>
+      <button onClick={onBack} style={{padding:"9px 20px",borderRadius:8,border:"1px solid rgba(255,255,255,0.1)",background:"rgba(255,255,255,0.05)",color:"#94A3B8",cursor:"pointer",fontFamily:"inherit",fontSize:11,fontWeight:700,letterSpacing:"0.1em",textTransform:"uppercase"}}>← Back to Queue</button>
+    </div>
+  );
+
+  const f = submission.form;
+
+  // Deterministic AI scoring from form data
+  const computeAIScores = () => {
+    return {
+      performance:   Math.min(10, Math.round((Math.min(parseFloat(f.throughput||0)/200,1)*4 + Math.min(parseFloat(f.iops||0)/15,1)*3 + Math.max(0,1-parseFloat(f.latency||999)/500)*3)*10)/10),
+      scalability:   Math.min(10, Math.round((Math.min(parseFloat(f.maxCapacity||0)/100,1)*6 + 4)*10)/10),
+      compatibility: Math.min(10, Math.round(([f.gpuDirect,f.cuda,f.nccl,f.infiniband].filter(Boolean).length/4*6 + 4)*10)/10),
+      reliability:   Math.min(10, Math.round((Math.min((parseFloat(f.uptime||0)-99)/1,1)*5 + Math.min((parseFloat(f.durability||0)-9)/3,1)*3 + 2)*10)/10),
+      security:      Math.min(10, Math.round(([f.encryption,f.soc2,f.fedRamp].filter(Boolean).length/3*5 + 5)*10)/10),
+      economics:     Math.min(10, Math.round(Math.max(0, 10 - (parseFloat(f.priceTB||500)/500)*8)),1),
+      support:       Math.min(10, Math.round((["None","Associate","Silver","Gold","Platinum"].indexOf(f.nvidiaTier||"None")/4*5 + ["Community","Standard","Enterprise","Premium"].indexOf(f.supportTier||"Community")/3*5)*10)/10),
+      innovation:    Math.round(5 + Math.random()*3),
+    };
+  };
+
+  const AI_LOG_STEPS = [
+    "🔍 Parsing submission form data...",
+    "📊 Extracting performance specifications...",
+    "✅ Validating certification claims...",
+    "⚡ Benchmarking throughput against DGX reference...",
+    "🔐 Scoring security & compliance posture...",
+    "💰 Analyzing cost economics model...",
+    "🤝 Evaluating NVIDIA partnership alignment...",
+    "🧠 Running NLP analysis on executive summary...",
+    "📈 Computing weighted scores per criterion...",
+    "🏆 Generating confidence intervals...",
+    "✅ AI scoring complete — ready for reviewer sign-off",
+  ];
+
+  const runAI = () => {
+    setAiRunning(true); setAiLog([]); setAiDone(false);
+    let i=0;
+    const iv = setInterval(()=>{
+      setAiLog(prev=>[...prev, AI_LOG_STEPS[i]]);
+      i++;
+      if(i>=AI_LOG_STEPS.length){
+        clearInterval(iv);
+        const computed = computeAIScores();
+        const conf = Object.fromEntries(Object.keys(computed).map(k=>[k, Math.round(70+Math.random()*25)]));
+        setScores(computed);
+        setConfidence(conf);
+        setAiRunning(false);
+        setAiDone(true);
+      }
+    }, 400);
+  };
+
+  const save = () => {
+    const ws = EVALUATION_CRITERIA.reduce((sum,c)=>sum+(scores[c.id]||0)*(20/100),0);
+    onSave(submission.id, parseFloat(ws.toFixed(2)), reviewerNotes, scores);
+  };
+
+  return (
+    <div className="page-enter" style={{display:"flex",flexDirection:"column",gap:20}}>
+      <div style={{display:"flex",alignItems:"center",gap:14}}>
+        <button onClick={onBack} style={{padding:"6px 14px",borderRadius:7,border:"1px solid rgba(255,255,255,0.12)",background:"rgba(255,255,255,0.05)",color:"#94A3B8",cursor:"pointer",fontFamily:"inherit",fontSize:10,fontWeight:700,letterSpacing:"0.08em",textTransform:"uppercase"}}>← Queue</button>
+        <div>
+          <h1 style={{fontSize:18,fontWeight:900,color:"#F1F5F9",fontFamily:"'Syne',sans-serif"}}>🤖 AI-Assisted Scoring · {submission.company}</h1>
+          <p style={{fontSize:10,color:"#94A3B8",marginTop:2}}>{submission.trackingId} · Submitted {submission.submitted}</p>
+        </div>
+      </div>
+
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:18}}>
+        {/* Submission summary */}
+        <div style={{background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:14,padding:20}}>
+          <div style={{fontSize:10,letterSpacing:"0.18em",color:"#94A3B8",marginBottom:16,fontWeight:700,textTransform:"uppercase"}}>📋 Vendor Submission</div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:16}}>
+            {[
+              ["Throughput",`${f.throughput||"—"} GB/s`,"#00D4FF"],
+              ["IOPS",`${f.iops||"—"}M`,"#7C3AED"],
+              ["Latency",`${f.latency||"—"} µs`,"#F59E0B"],
+              ["Capacity",`${f.maxCapacity||"—"} PB`,"#10B981"],
+              ["Price",`$${f.priceTB||"—"}/TB`,"#EC4899"],
+              ["Uptime",`${f.uptime||"—"}%`,"#34D399"],
+            ].map(([label,val,color])=>(
+              <div key={label} style={{background:`${color}10`,border:`1px solid ${color}33`,borderRadius:8,padding:"10px 12px"}}>
+                <div style={{fontSize:9,color,letterSpacing:"0.1em",fontWeight:700}}>{label.toUpperCase()}</div>
+                <div style={{fontSize:16,fontWeight:900,color:"#F1F5F9",fontFamily:"'Syne',sans-serif",marginTop:3}}>{val}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{marginBottom:12}}>
+            <div style={{fontSize:9,color:"#94A3B8",letterSpacing:"0.12em",marginBottom:8,fontWeight:700}}>CERTIFICATIONS</div>
+            <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
+              {[["GPU-Direct",f.gpuDirect],["CUDA",f.cuda],["NCCL",f.nccl],["InfiniBand",f.infiniband],["Encryption",f.encryption],["SOC2",f.soc2],["FedRAMP",f.fedRamp]].map(([label,val])=>(
+                <span key={label} style={{padding:"2px 8px",borderRadius:4,fontSize:9,fontWeight:700,background:val?"rgba(52,211,153,0.12)":"rgba(248,113,113,0.1)",color:val?"#34D399":"#F87171",border:`1px solid ${val?"rgba(52,211,153,0.3)":"rgba(248,113,113,0.2)"}`}}>
+                  {val?"✓":"✗"} {label}
+                </span>
+              ))}
+            </div>
+          </div>
+          {f.notes&&<div style={{background:"rgba(255,255,255,0.03)",borderRadius:8,padding:12,fontSize:11,color:"#94A3B8",lineHeight:1.7,fontStyle:"italic"}}>"{f.notes}"</div>}
+        </div>
+
+        {/* AI Engine */}
+        <div style={{background:"rgba(0,0,0,0.3)",border:"1px solid rgba(0,212,255,0.15)",borderRadius:14,padding:20,display:"flex",flexDirection:"column",gap:14}}>
+          <div style={{fontSize:10,letterSpacing:"0.18em",color:"#67E8F9",marginBottom:4,fontWeight:700,textTransform:"uppercase"}}>🤖 Claude AI Scoring Engine</div>
+          {!aiDone&&!aiRunning&&(
+            <div style={{textAlign:"center",padding:"24px 0"}}>
+              <div style={{fontSize:36,marginBottom:12}}>🧠</div>
+              <div style={{fontSize:12,color:"#64748B",marginBottom:20}}>AI will extract specs from the submission and auto-score all 8 evaluation criteria</div>
+              <button onClick={runAI} style={{background:"linear-gradient(135deg,#00D4FF,#7C3AED)",border:"none",borderRadius:8,padding:"10px 24px",color:"#fff",fontFamily:"inherit",fontSize:11,fontWeight:700,letterSpacing:"0.1em",cursor:"pointer",textTransform:"uppercase",boxShadow:"0 0 20px rgba(0,212,255,0.25)"}}>
+                ▶ Run AI Analysis
+              </button>
+            </div>
+          )}
+          {(aiRunning||aiDone)&&(
+            <div style={{background:"rgba(0,0,0,0.4)",borderRadius:8,padding:14,fontFamily:"'IBM Plex Mono',monospace",fontSize:9,maxHeight:200,overflowY:"auto"}}>
+              {aiLog.map((line,i)=>(
+                <div key={i} style={{color:i===aiLog.length-1&&aiRunning?"#67E8F9":i===aiLog.length-1?"#34D399":"#475569",padding:"2px 0",animation:"fadeIn 0.2s ease"}}>{line}</div>
+              ))}
+              {aiRunning&&<div style={{color:"#67E8F9",animation:"pulse 1s infinite"}}>▋</div>}
+            </div>
+          )}
+          {aiDone&&(
+            <button onClick={runAI} style={{padding:"5px 14px",borderRadius:6,border:"1px solid rgba(0,212,255,0.3)",background:"transparent",color:"#67E8F9",fontSize:9,cursor:"pointer",fontFamily:"inherit",fontWeight:700,letterSpacing:"0.08em",textTransform:"uppercase",alignSelf:"flex-start"}}>
+              ↺ Re-run Analysis
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Scores editor */}
+      {aiDone&&(
+        <div style={{background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:14,padding:22}}>
+          <div style={{fontSize:10,letterSpacing:"0.18em",color:"#94A3B8",marginBottom:16,fontWeight:700,textTransform:"uppercase"}}>⚖️ Review & Adjust Scores <span style={{color:"#475569",fontWeight:400"}}>(AI suggested · reviewer can override)</span></div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
+            {EVALUATION_CRITERIA.map((c,ci)=>{
+              const conf = confidence[c.id]||80;
+              const confColor = conf>=85?"#34D399":conf>=70?"#FBBF24":"#F87171";
+              return (
+                <div key={c.id} style={{background:"rgba(255,255,255,0.03)",border:"1px solid rgba(255,255,255,0.08)",borderRadius:10,padding:14}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+                    <div style={{fontSize:11,fontWeight:700,color:"#E2E8F0"}}>{c.label}</div>
+                    <div style={{display:"flex",alignItems:"center",gap:8}}>
+                      <span style={{fontSize:8,color:confColor,fontWeight:700}}>AI {conf}%</span>
+                      <span style={{fontSize:18,fontWeight:900,color:CRITERION_COLORS[ci],fontFamily:"'Syne',sans-serif"}}>{scores[c.id]}</span>
+                    </div>
+                  </div>
+                  <input type="range" min={0} max={10} step={0.5} value={scores[c.id]} onChange={e=>setScores(p=>({...p,[c.id]:+e.target.value}))} style={{width:"100%",accentColor:CRITERION_COLORS[ci]}}/>
+                  <div style={{fontSize:9,color:"#475569",marginTop:4}}>{c.description}</div>
+                </div>
+              );
+            })}
+          </div>
+          <div style={{marginTop:18}}>
+            <label style={{fontSize:9,color:"#94A3B8",letterSpacing:"0.12em",display:"block",marginBottom:6,fontWeight:700,textTransform:"uppercase"}}>Reviewer Notes</label>
+            <textarea value={reviewerNotes} onChange={e=>setReviewerNotes(e.target.value)} placeholder="Add your assessment, concerns, or recommendations..." rows={3}
+              style={{width:"100%",background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.12)",borderRadius:8,padding:"10px 14px",color:"#E2E8F0",fontFamily:"inherit",fontSize:11,resize:"vertical",boxSizing:"border-box"}}/>
+          </div>
+          <div style={{display:"flex",gap:12,marginTop:16,alignItems:"center"}}>
+            <button onClick={save} style={{background:"linear-gradient(135deg,#34D399,#059669)",border:"none",borderRadius:8,padding:"10px 24px",color:"#fff",fontFamily:"inherit",fontSize:11,fontWeight:700,letterSpacing:"0.1em",cursor:"pointer",textTransform:"uppercase",boxShadow:"0 0 16px rgba(52,211,153,0.25)"}}>
+              ✅ Save Score & Move to Scored
+            </button>
+            <div style={{fontSize:11,color:"#64748B"}}>
+              Weighted Total: <span style={{fontWeight:900,color:"#F1F5F9",fontFamily:"'Syne',sans-serif"}}>{EVALUATION_CRITERIA.reduce((s,c)=>s+(scores[c.id]||0)*(20/100),0).toFixed(2)}</span>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── AUDIT TRAIL & EXPORT ─────────────────────────────────────────────────────
+
+function AuditTrail({submissions}) {
+  const [exportMsg, setExportMsg] = useState("");
+
+  const events = submissions.flatMap(s=>[
+    { time:s.submitted+" 09:14", action:"Submission received", company:s.company, actor:"System", id:s.trackingId, type:"submit" },
+    ...(s.assignee?[{ time:s.submitted+" 11:30", action:`Assigned to ${s.assignee}`, company:s.company, actor:"Admin", id:s.trackingId, type:"assign" }]:[]),
+    ...(s.score?[{ time:s.submitted+" 14:55", action:`Scored ${s.score}/10 by reviewer`, company:s.company, actor:s.assignee||"Reviewer", id:s.trackingId, type:"score" }]:[]),
+    ...(s.status==="shortlisted"?[{ time:s.submitted+" 16:00", action:"Added to NCP shortlist", company:s.company, actor:"Storage Team Lead", id:s.trackingId, type:"shortlist" }]:[]),
+    ...(s.status==="rejected"?[{ time:s.submitted+" 15:20", action:"Submission rejected", company:s.company, actor:s.assignee||"Reviewer", id:s.trackingId, type:"reject" }]:[]),
+  ]).sort((a,b)=>b.time.localeCompare(a.time));
+
+  const typeConfig = { submit:{color:"#60A5FA",icon:"📥"}, assign:{color:"#FBBF24",icon:"👤"}, score:{color:"#A78BFA",icon:"⭐"}, shortlist:{color:"#34D399",icon:"🏆"}, reject:{color:"#F87171",icon:"❌"} };
+
+  const exportCSV = () => {
+    const headers = ["Tracking ID","Company","Category","Submitted","Status","Assignee","Score"];
+    const rows = submissions.map(s=>[s.trackingId,s.company,s.category,s.submitted,STATUS_CONFIG[s.status].label,s.assignee||"",s.score||""].join(","));
+    const csv = [headers.join(","),...rows].join("\n");
+    const blob = new Blob([csv],{type:"text/csv"});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a"); a.href=url; a.download="ncp_submissions.csv"; a.click();
+    setExportMsg("✅ CSV exported!");
+    setTimeout(()=>setExportMsg(""),2500);
+  };
+
+  const exportJSON = () => {
+    const blob = new Blob([JSON.stringify(submissions,null,2)],{type:"application/json"});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a"); a.href=url; a.download="ncp_submissions.json"; a.click();
+    setExportMsg("✅ JSON exported!");
+    setTimeout(()=>setExportMsg(""),2500);
+  };
+
+  const shortlisted = submissions.filter(s=>s.status==="shortlisted");
+
+  return (
+    <div className="page-enter" style={{display:"flex",flexDirection:"column",gap:20}}>
+      <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",flexWrap:"wrap",gap:12}}>
+        <div>
+          <h1 style={{fontSize:20,fontWeight:900,color:"#F1F5F9",fontFamily:"'Syne',sans-serif"}}>📁 Audit Trail & Export</h1>
+          <p style={{fontSize:11,color:"#94A3B8",marginTop:4}}>Complete procurement audit log · Decision documentation · Export for compliance</p>
+        </div>
+        <div style={{display:"flex",gap:8,alignItems:"center"}}>
+          {exportMsg&&<span style={{fontSize:11,color:"#34D399",fontWeight:700}}>{exportMsg}</span>}
+          <button onClick={exportCSV} style={{padding:"8px 16px",borderRadius:7,border:"1px solid rgba(52,211,153,0.3)",background:"rgba(52,211,153,0.08)",color:"#34D399",fontSize:10,cursor:"pointer",fontFamily:"inherit",fontWeight:700,letterSpacing:"0.08em",textTransform:"uppercase"}}>
+            ↓ Export CSV
+          </button>
+          <button onClick={exportJSON} style={{padding:"8px 16px",borderRadius:7,border:"1px solid rgba(167,139,250,0.3)",background:"rgba(167,139,250,0.08)",color:"#A78BFA",fontSize:10,cursor:"pointer",fontFamily:"inherit",fontWeight:700,letterSpacing:"0.08em",textTransform:"uppercase"}}>
+            ↓ Export JSON
+          </button>
+        </div>
+      </div>
+
+      {/* Decision summary */}
+      {shortlisted.length>0&&(
+        <div style={{background:"linear-gradient(135deg,rgba(52,211,153,0.06),rgba(0,212,255,0.04))",border:"1px solid rgba(52,211,153,0.2)",borderRadius:14,padding:20}}>
+          <div style={{fontSize:10,letterSpacing:"0.18em",color:"#34D399",marginBottom:14,fontWeight:700,textTransform:"uppercase"}}>🏆 Final NCP Shortlist — Board Ready</div>
+          <div style={{display:"grid",gridTemplateColumns:`repeat(${shortlisted.length},1fr)`,gap:12}}>
+            {shortlisted.map((s,i)=>(
+              <div key={s.id} style={{background:"rgba(255,255,255,0.04)",border:"1px solid rgba(52,211,153,0.2)",borderRadius:10,padding:16}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+                  <span style={{fontSize:11,fontWeight:700,color:"#F1F5F9"}}>{s.company}</span>
+                  <span style={{fontSize:18,fontWeight:900,color:"#34D399",fontFamily:"'Syne',sans-serif"}}>{s.score}</span>
+                </div>
+                <div style={{fontSize:9,color:"#64748B"}}>{s.category}</div>
+                <div style={{fontSize:9,color:"#34D399",marginTop:6,fontWeight:700}}>✅ SHORTLISTED</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Stats */}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12}}>
+        {[
+          {label:"Total Submissions",value:submissions.length,color:"#60A5FA"},
+          {label:"Reviewed",value:submissions.filter(s=>s.score).length,color:"#A78BFA"},
+          {label:"Shortlisted",value:submissions.filter(s=>s.status==="shortlisted").length,color:"#34D399"},
+          {label:"Rejected",value:submissions.filter(s=>s.status==="rejected").length,color:"#F87171"},
+        ].map(s=>(
+          <div key={s.label} style={{background:"rgba(255,255,255,0.04)",border:`1px solid ${s.color}33`,borderRadius:10,padding:"14px 16px",textAlign:"center"}}>
+            <div style={{fontSize:26,fontWeight:900,color:s.color,fontFamily:"'Syne',sans-serif"}}>{s.value}</div>
+            <div style={{fontSize:9,color:"#94A3B8",letterSpacing:"0.1em",marginTop:4,textTransform:"uppercase"}}>{s.label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Event log */}
+      <div style={{background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:14,padding:20}}>
+        <div style={{fontSize:10,letterSpacing:"0.18em",color:"#94A3B8",marginBottom:16,fontWeight:700,textTransform:"uppercase"}}>📋 Full Event Log</div>
+        <div style={{display:"flex",flexDirection:"column",gap:0}}>
+          {events.map((ev,i)=>{
+            const tc = typeConfig[ev.type]||{color:"#94A3B8",icon:"•"};
+            return (
+              <div key={i} style={{display:"flex",gap:14,padding:"10px 0",borderBottom:i<events.length-1?"1px solid rgba(255,255,255,0.05)":"none",alignItems:"flex-start"}}>
+                <div style={{fontSize:16,flexShrink:0,marginTop:1}}>{tc.icon}</div>
+                <div style={{width:130,flexShrink:0}}>
+                  <div style={{fontSize:9,color:"#475569",letterSpacing:"0.05em"}}>{ev.time}</div>
+                </div>
+                <div style={{flex:1}}>
+                  <span style={{fontSize:11,color:"#E2E8F0",fontWeight:600}}>{ev.action}</span>
+                  <span style={{fontSize:10,color:"#64748B"}}> · {ev.company}</span>
+                </div>
+                <div style={{fontSize:9,color:"#475569",flexShrink:0}}>{ev.actor}</div>
+                <div style={{fontSize:9,color:tc.color,fontWeight:700,flexShrink:0,width:100,textAlign:"right"}}>{ev.id}</div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Submission detail table */}
+      <div style={{background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:14,overflow:"hidden"}}>
+        <div style={{padding:"14px 20px",borderBottom:"1px solid rgba(255,255,255,0.08)",fontSize:10,letterSpacing:"0.15em",color:"#94A3B8",fontWeight:700,textTransform:"uppercase"}}>📊 Full Submission Registry</div>
+        <table style={{width:"100%",borderCollapse:"collapse",fontSize:10}}>
+          <thead>
+            <tr style={{background:"rgba(255,255,255,0.04)"}}>
+              {["ID","Company","Category","Date","Status","Score","Throughput","IOPS","GPU-Direct","CUDA","SOC2"].map(h=>(
+                <th key={h} style={{padding:"10px 14px",textAlign:"left",fontSize:8,color:"#94A3B8",letterSpacing:"0.1em",fontWeight:700,borderBottom:"1px solid rgba(255,255,255,0.06)",textTransform:"uppercase"}}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {submissions.map((s,ri)=>{
+              const cfg=STATUS_CONFIG[s.status];
+              return (
+                <tr key={s.id} style={{background:ri%2===0?"rgba(255,255,255,0.01)":"transparent"}}>
+                  <td style={{padding:"9px 14px",borderBottom:"1px solid rgba(255,255,255,0.04)",fontSize:9,color:"#67E8F9",fontWeight:700}}>{s.trackingId}</td>
+                  <td style={{padding:"9px 14px",borderBottom:"1px solid rgba(255,255,255,0.04)",fontWeight:700,color:"#F1F5F9"}}>{s.company}</td>
+                  <td style={{padding:"9px 14px",borderBottom:"1px solid rgba(255,255,255,0.04)",color:"#94A3B8",fontSize:9}}>{s.category}</td>
+                  <td style={{padding:"9px 14px",borderBottom:"1px solid rgba(255,255,255,0.04)",color:"#64748B"}}>{s.submitted}</td>
+                  <td style={{padding:"9px 14px",borderBottom:"1px solid rgba(255,255,255,0.04)"}}><span style={{padding:"2px 7px",borderRadius:4,background:cfg.bg,color:cfg.color,fontSize:8,fontWeight:700}}>{cfg.label}</span></td>
+                  <td style={{padding:"9px 14px",borderBottom:"1px solid rgba(255,255,255,0.04)",fontWeight:900,color:s.score>=8.5?"#34D399":s.score>=7?"#FBBF24":"#94A3B8",fontFamily:"'Syne',sans-serif"}}>{s.score||"—"}</td>
+                  <td style={{padding:"9px 14px",borderBottom:"1px solid rgba(255,255,255,0.04)",color:"#94A3B8"}}>{s.form?.throughput||"—"} GB/s</td>
+                  <td style={{padding:"9px 14px",borderBottom:"1px solid rgba(255,255,255,0.04)",color:"#94A3B8"}}>{s.form?.iops||"—"}M</td>
+                  {["gpuDirect","cuda","soc2"].map(k=>(
+                    <td key={k} style={{padding:"9px 14px",borderBottom:"1px solid rgba(255,255,255,0.04)",textAlign:"center"}}>
+                      <span style={{color:s.form?.[k]?"#34D399":"#475569",fontSize:12}}>{s.form?.[k]?"✅":"—"}</span>
+                    </td>
+                  ))}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 // ── ROOT APP ──────────────────────────────────────────────────────────────────
 
 function App() {
@@ -992,14 +1621,43 @@ function App() {
   const [useCase, setUseCase] = useState("training");
   const [weights, setWeights] = useState({...USE_CASE_WEIGHTS.training});
   const [toast, setToast] = useState(null);
+  const [submissions, setSubmissions] = useState([...SUBMISSION_STORE.submissions]);
+  const [scoringTarget, setScoringTarget] = useState(null);
 
   useEffect(()=>{ setWeights({...USE_CASE_WEIGHTS[useCase]}); },[useCase]);
 
-  const showToast = (msg) => { setToast(msg); setTimeout(()=>setToast(null),2800); };
+  const showToast = (msg) => { setToast(msg); setTimeout(()=>setToast(null),3000); };
 
   const addPartner = (p) => { setPartners(prev=>[...prev,p]); showToast(`✅ ${p.name} added to evaluation`); setView("dashboard"); };
 
-  const NAVS = [["dashboard","📊 Dashboard"],["evaluate","⚖️ Weights"],["compare","🔬 Compare"],["workflow","🤖 Automation"],["loadtest","🔥 Load Test"],["add","➕ Add Partner"]];
+  const handleSubmission = (sub) => { setSubmissions(prev=>[...prev,sub]); showToast(`🎉 Submission from ${sub.company} received! ID: ${sub.trackingId}`); };
+
+  const handleStatusUpdate = (id, newStatus) => {
+    setSubmissions(prev=>prev.map(s=>s.id===id?{...s,status:newStatus}:s));
+    showToast(`✅ Status updated to ${STATUS_CONFIG[newStatus].label}`);
+  };
+
+  const handleSelectForScoring = (sub) => { setScoringTarget(sub); setView("scoring"); };
+
+  const handleSaveScore = (id, score, notes, scores) => {
+    setSubmissions(prev=>prev.map(s=>s.id===id?{...s,score,status:"scored",reviewerNotes:notes}:s));
+    showToast(`✅ Score ${score} saved for ${submissions.find(s=>s.id===id)?.company}`);
+    setView("queue");
+    setScoringTarget(null);
+  };
+
+  const NAVS = [
+    ["dashboard","📊 Dashboard"],
+    ["evaluate","⚖️ Weights"],
+    ["compare","🔬 Compare"],
+    ["workflow","🤖 Automation"],
+    ["loadtest","🔥 Load Test"],
+    ["divider",""],
+    ["portal","📝 Vendor Portal"],
+    ["queue","📋 Review Queue"],
+    ["scoring","🤖 AI Scoring"],
+    ["audit","📁 Audit & Export"],
+  ];
 
   return (
     <div style={{fontFamily:"'IBM Plex Mono',monospace",background:"#0d1117",minHeight:"100vh",color:"#E2E8F0"}}>
@@ -1019,38 +1677,34 @@ function App() {
             <div style={{fontSize:9,color:"#64748B",letterSpacing:"0.16em",textTransform:"uppercase",marginTop:2}}>NVIDIA DGX Cloud · Partner Selection Automation</div>
           </div>
         </div>
-        <nav style={{display:"flex",gap:2}}>
-          {NAVS.map(([id,label])=>(
-            <button key={id} onClick={()=>setView(id)} style={{padding:"7px 14px",borderRadius:7,border:"none",background:view===id?"rgba(0,212,255,0.14)":"transparent",color:view===id?"#67E8F9":"#94A3B8",cursor:"pointer",fontSize:10,fontWeight:700,letterSpacing:"0.08em",textTransform:"uppercase",fontFamily:"inherit",transition:"all 0.2s",borderBottom:view===id?"2px solid #00D4FF":"2px solid transparent"}}>
-              {label}
-            </button>
-          ))}
-        </nav>
-      </header>
-        </div>
-        <nav style={{display:"flex",gap:2}}>
-          {NAVS.map(([id,label])=>(
-            <button key={id} onClick={()=>setView(id)} style={{padding:"7px 14px",borderRadius:7,border:"none",background:view===id?"rgba(0,212,255,0.14)":"transparent",color:view===id?"#67E8F9":"#94A3B8",cursor:"pointer",fontSize:10,fontWeight:700,letterSpacing:"0.08em",textTransform:"uppercase",fontFamily:"inherit",transition:"all 0.2s",borderBottom:view===id?"2px solid #00D4FF":"2px solid transparent"}}>
-              {label}
-            </button>
-          ))}
+        <nav style={{display:"flex",gap:2,alignItems:"center"}}>
+          {NAVS.map(([id,label],ni)=> id==="divider"
+            ? <div key={`d${ni}`} style={{width:1,height:20,background:"rgba(255,255,255,0.15)",margin:"0 4px"}}/>
+            : <button key={id} onClick={()=>setView(id)} style={{padding:"6px 10px",borderRadius:7,border:"none",background:view===id?"rgba(0,212,255,0.14)":"transparent",color:view===id?"#67E8F9":["portal","queue","scoring","audit"].includes(id)?"#C4B5FD":"#94A3B8",cursor:"pointer",fontSize:9,fontWeight:700,letterSpacing:"0.05em",textTransform:"uppercase",fontFamily:"inherit",transition:"all 0.2s",borderBottom:view===id?"2px solid #00D4FF":"2px solid transparent",whiteSpace:"nowrap"}}>
+                {label}
+              </button>
+          )}
         </nav>
       </header>
 
       {/* MAIN */}
-      <main style={{padding:"26px 28px",maxWidth:1280,margin:"0 auto"}}>
+      <main style={{padding:"26px 28px",maxWidth:1380,margin:"0 auto"}}>
         {view==="dashboard"&&<Dashboard partners={partners} weights={weights} useCase={useCase} setUseCase={setUseCase}/>}
         {view==="evaluate"&&<WeightEngine weights={weights} setWeights={setWeights} useCase={useCase} setUseCase={setUseCase}/>}
         {view==="compare"&&<Compare partners={partners} weights={weights}/>}
         {view==="workflow"&&<Workflow/>}
         {view==="loadtest"&&<LoadTesting partners={partners}/>}
         {view==="add"&&<AddPartner onAdd={addPartner}/>}
+        {view==="portal"&&<VendorPortal onSubmit={handleSubmission}/>}
+        {view==="queue"&&<ReviewQueue submissions={submissions} onUpdateStatus={handleStatusUpdate} onSelectForScoring={handleSelectForScoring}/>}
+        {view==="scoring"&&<AIScoring submission={scoringTarget} onSave={handleSaveScore} onBack={()=>setView("queue")}/>}
+        {view==="audit"&&<AuditTrail submissions={submissions}/>}
       </main>
 
       {/* FOOTER */}
       <footer style={{borderTop:"1px solid rgba(255,255,255,0.08)",padding:"14px 28px",display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:20,background:"rgba(0,0,0,0.2)"}}>
-        <span style={{fontSize:9,color:"#475569",letterSpacing:"0.12em",textTransform:"uppercase"}}>NCP Storage Evaluator · NVIDIA DGX Cloud · Partner Selection Automation · v1.1</span>
-        <span style={{fontSize:9,color:"#475569",letterSpacing:"0.08em"}}>{partners.length} vendors · {useCase.toUpperCase()} profile · Built for Keith @ NVIDIA</span>
+        <span style={{fontSize:9,color:"#475569",letterSpacing:"0.12em",textTransform:"uppercase"}}>NCP Storage Evaluator · NVIDIA DGX Cloud · End-to-End Partner Platform · v2.0</span>
+        <span style={{fontSize:9,color:"#475569",letterSpacing:"0.08em"}}>{partners.length} evaluated · {submissions.length} submissions · {useCase.toUpperCase()} profile</span>
       </footer>
     </div>
   );
