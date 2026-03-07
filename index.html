@@ -12,19 +12,31 @@
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   html { scroll-behavior: smooth; }
-  body { background: #060910; color: #E2E8F0; font-family: 'IBM Plex Mono', monospace; overflow-x: hidden; }
-  input[type=range] { -webkit-appearance: none; height: 4px; border-radius: 2px; background: rgba(255,255,255,0.1); outline: none; }
-  input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; border-radius: 50%; background: #00D4FF; cursor: pointer; box-shadow: 0 0 6px #00D4FF88; }
-  input, textarea { outline: none; }
-  input:focus, textarea:focus { border-color: rgba(0,212,255,0.4) !important; }
+  body {
+    background: #0d1117;
+    color: #E2E8F0;
+    font-family: 'IBM Plex Mono', monospace;
+    overflow-x: hidden;
+    background-image:
+      radial-gradient(ellipse 80% 50% at 20% -10%, rgba(0,212,255,0.09) 0%, transparent 60%),
+      radial-gradient(ellipse 60% 40% at 85% 110%, rgba(124,58,237,0.08) 0%, transparent 60%);
+  }
+  input[type=range] { -webkit-appearance: none; height: 5px; border-radius: 3px; background: rgba(255,255,255,0.12); outline: none; }
+  input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%; background: linear-gradient(135deg,#00D4FF,#7C3AED); cursor: pointer; box-shadow: 0 0 8px rgba(0,212,255,0.5); }
+  input, textarea { outline: none; color: #E2E8F0; }
+  input:focus, textarea:focus { border-color: rgba(0,212,255,0.5) !important; box-shadow: 0 0 0 3px rgba(0,212,255,0.08) !important; }
   ::-webkit-scrollbar { width: 6px; height: 6px; }
-  ::-webkit-scrollbar-track { background: #0a0f1e; }
-  ::-webkit-scrollbar-thumb { background: #1e2a3a; border-radius: 3px; }
-  @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+  ::-webkit-scrollbar-track { background: #0d1117; }
+  ::-webkit-scrollbar-thumb { background: #2a3a4a; border-radius: 3px; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
   @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.4; } }
   @keyframes slideIn { from { opacity:0; transform:translateX(20px); } to { opacity:1; transform:translateX(0); } }
-  .page-enter { animation: fadeIn 0.3s ease forwards; }
+  .page-enter { animation: fadeIn 0.35s ease forwards; }
   .toast-enter { animation: slideIn 0.3s ease forwards; }
+  .partner-row { transition: all 0.2s ease !important; }
+  .partner-row:hover { background: rgba(255,255,255,0.05) !important; transform: translateX(4px); box-shadow: 0 4px 24px rgba(0,0,0,0.3); }
+  .kpi-card { transition: transform 0.2s ease, box-shadow 0.2s ease; }
+  .kpi-card:hover { transform: translateY(-3px); box-shadow: 0 12px 40px rgba(0,0,0,0.5) !important; }
 </style>
 </head>
 <body>
@@ -52,7 +64,7 @@ const SAMPLE_PARTNERS = [
     scores:{performance:9.0,scalability:9.2,compatibility:8.8,reliability:9.0,security:8.5,economics:7.0,support:8.0,innovation:9.5},
     highlights:["Disaggregated shared everything","Strong AI benchmarks","Fast-growing"], risks:["Newer company (2016)","Limited legacy refs"],
     notes:"Exceptional AI-era architecture. Top innovation score." },
-  { id:"netapp", name:"NetApp StorageGRID", category:"Enterprise Hybrid Storage", logo:"N", color:"#0067C5",
+  { id:"netapp", name:"NetApp StorageGRID", category:"Enterprise Hybrid Storage", logo:"N", color:"#38BDF8",
     scores:{performance:7.5,scalability:8.8,compatibility:7.8,reliability:9.5,security:9.2,economics:7.5,support:9.5,innovation:7.0},
     highlights:["30+ yr enterprise track record","FedRAMP authorized","Global support"], risks:["Legacy architecture","Slower AI feature velocity"],
     notes:"Safest enterprise pick. Strong for regulated industries." },
@@ -64,7 +76,7 @@ const SAMPLE_PARTNERS = [
     scores:{performance:7.8,scalability:9.0,compatibility:7.5,reliability:8.2,security:7.8,economics:8.0,support:7.0,innovation:8.8},
     highlights:["Hybrid-cloud native","Data orchestration","Multi-cloud fabric"], risks:["Smaller ecosystem","Newer market presence"],
     notes:"Innovative global namespace. Good for multi-cloud NCP scenarios." },
-  { id:"ibm", name:"IBM Spectrum Scale", category:"Enterprise Parallel FS", logo:"I", color:"#0F62FE",
+  { id:"ibm", name:"IBM Spectrum Scale", category:"Enterprise Parallel FS", logo:"I", color:"#60A5FA",
     scores:{performance:8.2,scalability:9.5,compatibility:7.5,reliability:9.8,security:9.5,economics:6.0,support:9.8,innovation:6.5},
     highlights:["Proven petabyte scale","FedRAMP/HIPAA","Fortune 500 refs"], risks:["High TCO","Slower innovation cycle"],
     notes:"Most mature and reliable. Best for large regulated enterprises." },
@@ -132,14 +144,20 @@ function Tag({children, color}) {
 
 function Card({children, highlight, style={}}) {
   return (
-    <div style={{background: highlight?"rgba(0,212,255,0.04)":"rgba(255,255,255,0.03)", border:`1px solid ${highlight?"rgba(0,212,255,0.2)":"rgba(255,255,255,0.07)"}`, borderRadius:12, padding:20, ...style}}>
+    <div style={{
+      background: highlight ? "rgba(0,212,255,0.06)" : "rgba(255,255,255,0.05)",
+      border: `1px solid ${highlight ? "rgba(0,212,255,0.25)" : "rgba(255,255,255,0.1)"}`,
+      borderRadius:14, padding:20,
+      backdropFilter:"blur(4px)",
+      ...style
+    }}>
       {children}
     </div>
   );
 }
 
 function SectionTitle({children}) {
-  return <div style={{fontSize:10,letterSpacing:"0.2em",textTransform:"uppercase",color:"#64748B",marginBottom:14,fontWeight:700}}>{children}</div>;
+  return <div style={{fontSize:10,letterSpacing:"0.2em",textTransform:"uppercase",color:"#94A3B8",marginBottom:14,fontWeight:700}}>{children}</div>;
 }
 
 function Btn({children, onClick, variant="primary", size="md", disabled=false, style={}}) {
@@ -182,20 +200,20 @@ function Dashboard({partners, weights, useCase, setUseCase}) {
   return (
     <div className="page-enter" style={{display:"flex",flexDirection:"column",gap:22}}>
       {/* KPIs */}
-      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12}}>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:14}}>
         {[
           {label:"Total Proposals",value:partners.length,icon:"📦",color:"#00D4FF"},
           {label:"Shortlisted",value:top3.length,icon:"🏆",color:"#10B981"},
           {label:"Top Avg Score",value:(top3.reduce((s,p)=>s+p.ws,0)/top3.length).toFixed(2),icon:"⭐",color:"#FBBF24"},
-          {label:"Use-Case Profile",value:useCase.toUpperCase(),icon:"🎯",color:"#7C3AED"},
+          {label:"Use-Case Profile",value:useCase.toUpperCase(),icon:"🎯",color:"#A78BFA"},
         ].map(kpi=>(
-          <Card key={kpi.label} style={{display:"flex",alignItems:"center",gap:14}}>
-            <div style={{fontSize:26}}>{kpi.icon}</div>
+          <div key={kpi.label} className="kpi-card" style={{background:`linear-gradient(135deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.03) 100%)`,border:`1px solid ${kpi.color}44`,borderRadius:14,padding:"18px 20px",display:"flex",alignItems:"center",gap:16,boxShadow:`0 4px 24px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.08)`}}>
+            <div style={{width:44,height:44,borderRadius:12,background:kpi.color+"18",border:`1px solid ${kpi.color}44`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,flexShrink:0}}>{kpi.icon}</div>
             <div>
-              <div style={{fontSize:20,fontWeight:900,color:kpi.color,fontFamily:"'Syne',sans-serif"}}>{kpi.value}</div>
-              <div style={{fontSize:9,color:"#64748B",letterSpacing:"0.1em",textTransform:"uppercase",marginTop:2}}>{kpi.label}</div>
+              <div style={{fontSize:22,fontWeight:900,color:kpi.color,fontFamily:"'Syne',sans-serif",lineHeight:1}}>{kpi.value}</div>
+              <div style={{fontSize:9,color:"#94A3B8",letterSpacing:"0.12em",textTransform:"uppercase",marginTop:4}}>{kpi.label}</div>
             </div>
-          </Card>
+          </div>
         ))}
       </div>
 
@@ -224,35 +242,49 @@ function Dashboard({partners, weights, useCase, setUseCase}) {
       {/* Partner list */}
       <div>
         <SectionTitle>Ranked Partners · {useCase.toUpperCase()} Profile</SectionTitle>
-        <div style={{display:"flex",flexDirection:"column",gap:9}}>
+        <div style={{display:"flex",flexDirection:"column",gap:10}}>
           {ranked.map((p,idx)=>{
             const grade=getGrade(p.ws), isSel=selected.includes(p.id);
+            const isTop = idx === 0;
             return (
-              <div key={p.id} onClick={()=>toggle(p.id)} style={{background:"rgba(255,255,255,0.025)",border:`1px solid ${idx===0?"rgba(255,215,0,0.2)":idx<3?"rgba(0,212,255,0.12)":"rgba(255,255,255,0.06)"}`,borderRadius:10,padding:"14px 18px",display:"flex",alignItems:"center",gap:18,cursor:"pointer",transition:"all 0.2s"}}>
-                <div style={{width:26,textAlign:"center",fontSize:idx<3?18:12,color:idx===0?"#FFD700":idx<3?"#00D4FF":"#475569",flexShrink:0}}>
-                  {idx===0?"🥇":idx===1?"🥈":idx===2?"🥉":`#${idx+1}`}
+              <div key={p.id} onClick={()=>toggle(p.id)} className="partner-row" style={{
+                background: isTop ? `linear-gradient(135deg, rgba(255,215,0,0.06) 0%, rgba(255,255,255,0.04) 100%)` : "rgba(255,255,255,0.04)",
+                border:`1px solid ${isTop?"rgba(255,215,0,0.25)":idx<3?"rgba(0,212,255,0.18)":"rgba(255,255,255,0.09)"}`,
+                borderRadius:12, padding:"16px 20px",
+                display:"flex", alignItems:"center", gap:18, cursor:"pointer",
+                boxShadow: isTop ? "0 4px 20px rgba(255,215,0,0.06)" : "0 2px 8px rgba(0,0,0,0.2)"
+              }}>
+                {/* Rank */}
+                <div style={{width:28,textAlign:"center",fontSize:idx<3?20:13,flexShrink:0,lineHeight:1}}>
+                  {idx===0?"🥇":idx===1?"🥈":idx===2?"🥉":<span style={{color:"#64748B",fontWeight:700}}>#{idx+1}</span>}
                 </div>
-                <div style={{width:32,height:32,borderRadius:8,background:p.color+"22",border:`1px solid ${p.color}44`,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:900,color:p.color,fontSize:14,flexShrink:0}}>{p.logo}</div>
-                <div style={{width:170,flexShrink:0}}>
-                  <div style={{fontWeight:700,fontSize:13,color:"#F1F5F9"}}>{p.name}</div>
-                  <div style={{fontSize:9,color:"#64748B",marginTop:2}}>{p.category}</div>
+                {/* Logo badge */}
+                <div style={{width:38,height:38,borderRadius:10,background:`linear-gradient(135deg,${p.color}30,${p.color}12)`,border:`1.5px solid ${p.color}77`,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:900,color:p.color,fontSize:16,flexShrink:0,boxShadow:`0 0 12px ${p.color}22`}}>{p.logo}</div>
+                {/* Name */}
+                <div style={{width:180,flexShrink:0}}>
+                  <div style={{fontWeight:700,fontSize:13,color:"#F1F5F9",letterSpacing:"0.02em"}}>{p.name}</div>
+                  <div style={{fontSize:9,color:"#94A3B8",marginTop:3,letterSpacing:"0.04em"}}>{p.category}</div>
                 </div>
-                <div style={{flex:1,display:"flex",flexDirection:"column",gap:4}}>
+                {/* Score bars */}
+                <div style={{flex:1,display:"flex",flexDirection:"column",gap:5}}>
                   {EVALUATION_CRITERIA.slice(0,4).map(c=>(
                     <div key={c.id} style={{display:"flex",alignItems:"center",gap:8}}>
-                      <span style={{fontSize:8,color:"#475569",width:72,textAlign:"right",letterSpacing:"0.04em"}}>{c.label.split(" ")[0]}</span>
+                      <span style={{fontSize:8,color:"#94A3B8",width:78,textAlign:"right",letterSpacing:"0.04em"}}>{c.label.split(" ")[0]}</span>
                       <ScoreBar value={p.scores[c.id]||0} color={p.color}/>
-                      <span style={{fontSize:9,color:"#94A3B8",width:20}}>{p.scores[c.id]}</span>
+                      <span style={{fontSize:10,color:"#CBD5E1",width:22,fontWeight:600}}>{p.scores[c.id]}</span>
                     </div>
                   ))}
                 </div>
-                <div style={{textAlign:"center",width:70,flexShrink:0}}>
-                  <div style={{fontSize:26,fontWeight:900,color:grade.color,fontFamily:"'Syne',sans-serif",lineHeight:1}}>{p.ws.toFixed(1)}</div>
-                  <div style={{fontSize:14,fontWeight:700,color:grade.color}}>{grade.label}</div>
-                  <div style={{fontSize:8,color:"#475569",marginTop:2,letterSpacing:"0.08em"}}>WEIGHTED</div>
+                {/* Grade */}
+                <div style={{textAlign:"center",width:72,flexShrink:0}}>
+                  <div style={{fontSize:28,fontWeight:900,color:grade.color,fontFamily:"'Syne',sans-serif",lineHeight:1,textShadow:`0 0 20px ${grade.color}66`}}>{p.ws.toFixed(1)}</div>
+                  <div style={{fontSize:15,fontWeight:700,color:grade.color}}>{grade.label}</div>
+                  <div style={{fontSize:8,color:"#64748B",marginTop:2,letterSpacing:"0.1em"}}>WEIGHTED</div>
                 </div>
-                <RadarChart scores={p.scores} color={p.color} size={72}/>
-                <div style={{width:18,height:18,borderRadius:4,border:`2px solid ${isSel?"#00D4FF":"#334155"}`,background:isSel?"#00D4FF22":"transparent",display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,color:"#00D4FF",flexShrink:0}}>
+                {/* Radar */}
+                <RadarChart scores={p.scores} color={p.color} size={76}/>
+                {/* Select checkbox */}
+                <div style={{width:20,height:20,borderRadius:5,border:`2px solid ${isSel?grade.color:"#334155"}`,background:isSel?grade.color+"22":"transparent",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,color:grade.color,flexShrink:0,transition:"all 0.2s"}}>
                   {isSel?"✓":""}
                 </div>
               </div>
@@ -262,30 +294,35 @@ function Dashboard({partners, weights, useCase, setUseCase}) {
       </div>
 
       {/* Top 3 recommendation */}
-      <Card highlight>
+      <div style={{background:"linear-gradient(135deg,rgba(0,212,255,0.06),rgba(124,58,237,0.06))",border:"1px solid rgba(0,212,255,0.2)",borderRadius:16,padding:22}}>
         <SectionTitle>🏆 Recommended Shortlist for NCP Review</SectionTitle>
-        <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:14}}>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:16}}>
           {top3.map((p,i)=>{
             const grade=getGrade(p.ws);
+            const medals=["🥇","🥈","🥉"];
+            const labels=["Primary Recommendation","Strong Alternative","Specialized Option"];
             return (
-              <div key={p.id} style={{background:"rgba(255,255,255,0.025)",border:`1px solid ${p.color}33`,borderRadius:10,padding:16}}>
-                <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}>
-                  <div style={{width:30,height:30,borderRadius:7,background:p.color+"22",border:`1px solid ${p.color}44`,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:900,color:p.color,fontSize:13}}>{p.logo}</div>
-                  <div>
-                    <div style={{fontWeight:700,fontSize:12,color:"#F1F5F9"}}>{p.name}</div>
-                    <div style={{fontSize:9,color:"#64748B"}}>{["Primary Recommendation","Strong Alternative","Specialized Option"][i]}</div>
+              <div key={p.id} style={{background:`linear-gradient(135deg,${p.color}0d,rgba(255,255,255,0.03))`,border:`1.5px solid ${p.color}55`,borderRadius:12,padding:18,position:"relative",overflow:"hidden"}}>
+                {/* Glow accent */}
+                <div style={{position:"absolute",top:-30,right:-30,width:80,height:80,background:p.color,borderRadius:"50%",filter:"blur(40px)",opacity:0.12,pointerEvents:"none"}}/>
+                <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>
+                  <span style={{fontSize:20}}>{medals[i]}</span>
+                  <div style={{width:32,height:32,borderRadius:8,background:p.color+"25",border:`1.5px solid ${p.color}66`,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:900,color:p.color,fontSize:14,boxShadow:`0 0 10px ${p.color}33`}}>{p.logo}</div>
+                  <div style={{flex:1}}>
+                    <div style={{fontWeight:700,fontSize:13,color:"#F1F5F9"}}>{p.name}</div>
+                    <div style={{fontSize:9,color:"#94A3B8",marginTop:1}}>{labels[i]}</div>
                   </div>
-                  <div style={{marginLeft:"auto",fontSize:18,fontWeight:900,color:grade.color,fontFamily:"'Syne',sans-serif"}}>{p.ws.toFixed(1)}</div>
+                  <div style={{fontSize:20,fontWeight:900,color:grade.color,fontFamily:"'Syne',sans-serif",textShadow:`0 0 12px ${grade.color}88`}}>{p.ws.toFixed(1)}</div>
                 </div>
-                <div style={{fontSize:11,color:"#94A3B8",lineHeight:1.7,marginBottom:10}}>{p.notes}</div>
-                <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
+                <div style={{fontSize:11,color:"#CBD5E1",lineHeight:1.7,marginBottom:12}}>{p.notes}</div>
+                <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
                   {p.highlights.slice(0,2).map(h=><Tag key={h} color={p.color}>{h}</Tag>)}
                 </div>
               </div>
             );
           })}
         </div>
-      </Card>
+      </div>
     </div>
   );
 }
@@ -965,26 +1002,35 @@ function App() {
   const NAVS = [["dashboard","📊 Dashboard"],["evaluate","⚖️ Weights"],["compare","🔬 Compare"],["workflow","🤖 Automation"],["loadtest","🔥 Load Test"],["add","➕ Add Partner"]];
 
   return (
-    <div style={{fontFamily:"'IBM Plex Mono',monospace",background:"#060910",minHeight:"100vh",color:"#E2E8F0"}}>
+    <div style={{fontFamily:"'IBM Plex Mono',monospace",background:"#0d1117",minHeight:"100vh",color:"#E2E8F0"}}>
       {/* TOAST */}
       {toast&&(
-        <div className="toast-enter" style={{position:"fixed",top:76,right:22,background:"#0a1628",border:"1px solid #10B981",borderRadius:9,padding:"9px 16px",fontSize:11,color:"#10B981",zIndex:9999,fontWeight:700,letterSpacing:"0.05em",boxShadow:"0 8px 32px rgba(0,0,0,0.7)"}}>
+        <div className="toast-enter" style={{position:"fixed",top:76,right:22,background:"#0f1f0f",border:"1px solid #10B981",borderRadius:9,padding:"10px 18px",fontSize:11,color:"#34D399",zIndex:9999,fontWeight:700,letterSpacing:"0.05em",boxShadow:"0 8px 32px rgba(0,0,0,0.8), 0 0 20px rgba(16,185,129,0.2)"}}>
           {toast}
         </div>
       )}
 
       {/* HEADER */}
-      <header style={{background:"linear-gradient(135deg,#070d1c 0%,#0b1432 100%)",borderBottom:"1px solid rgba(0,212,255,0.12)",padding:"0 28px",display:"flex",alignItems:"center",justifyContent:"space-between",height:60,position:"sticky",top:0,zIndex:100,backdropFilter:"blur(20px)"}}>
-        <div style={{display:"flex",alignItems:"center",gap:12}}>
-          <div style={{width:34,height:34,background:"linear-gradient(135deg,#00D4FF,#7C3AED)",borderRadius:8,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,fontWeight:900,color:"#fff",boxShadow:"0 0 16px rgba(0,212,255,0.3)"}}>N</div>
+      <header style={{background:"rgba(13,17,23,0.95)",borderBottom:"1px solid rgba(255,255,255,0.1)",padding:"0 28px",display:"flex",alignItems:"center",justifyContent:"space-between",height:62,position:"sticky",top:0,zIndex:100,backdropFilter:"blur(20px)",boxShadow:"0 4px 32px rgba(0,0,0,0.5)"}}>
+        <div style={{display:"flex",alignItems:"center",gap:14}}>
+          <div style={{width:36,height:36,background:"linear-gradient(135deg,#00D4FF,#7C3AED)",borderRadius:10,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,fontWeight:900,color:"#fff",boxShadow:"0 0 24px rgba(0,212,255,0.45)"}}>N</div>
           <div>
-            <div style={{fontSize:12,fontWeight:700,letterSpacing:"0.15em",textTransform:"uppercase",color:"#E2E8F0",fontFamily:"'Syne',sans-serif"}}>NCP Storage Evaluator</div>
-            <div style={{fontSize:9,color:"#475569",letterSpacing:"0.18em",textTransform:"uppercase"}}>NVIDIA DGX Cloud · Partner Selection Automation</div>
+            <div style={{fontSize:13,fontWeight:700,letterSpacing:"0.12em",textTransform:"uppercase",color:"#F1F5F9",fontFamily:"'Syne',sans-serif"}}>NCP Storage Evaluator</div>
+            <div style={{fontSize:9,color:"#64748B",letterSpacing:"0.16em",textTransform:"uppercase",marginTop:2}}>NVIDIA DGX Cloud · Partner Selection Automation</div>
           </div>
         </div>
-        <nav style={{display:"flex",gap:3}}>
+        <nav style={{display:"flex",gap:2}}>
           {NAVS.map(([id,label])=>(
-            <button key={id} onClick={()=>setView(id)} style={{padding:"6px 13px",borderRadius:6,border:"none",background:view===id?"rgba(0,212,255,0.12)":"transparent",color:view===id?"#00D4FF":"#64748B",cursor:"pointer",fontSize:10,fontWeight:700,letterSpacing:"0.08em",textTransform:"uppercase",fontFamily:"inherit",transition:"all 0.2s",borderBottom:view===id?"1px solid rgba(0,212,255,0.4)":"1px solid transparent"}}>
+            <button key={id} onClick={()=>setView(id)} style={{padding:"7px 14px",borderRadius:7,border:"none",background:view===id?"rgba(0,212,255,0.14)":"transparent",color:view===id?"#67E8F9":"#94A3B8",cursor:"pointer",fontSize:10,fontWeight:700,letterSpacing:"0.08em",textTransform:"uppercase",fontFamily:"inherit",transition:"all 0.2s",borderBottom:view===id?"2px solid #00D4FF":"2px solid transparent"}}>
+              {label}
+            </button>
+          ))}
+        </nav>
+      </header>
+        </div>
+        <nav style={{display:"flex",gap:2}}>
+          {NAVS.map(([id,label])=>(
+            <button key={id} onClick={()=>setView(id)} style={{padding:"7px 14px",borderRadius:7,border:"none",background:view===id?"rgba(0,212,255,0.14)":"transparent",color:view===id?"#67E8F9":"#94A3B8",cursor:"pointer",fontSize:10,fontWeight:700,letterSpacing:"0.08em",textTransform:"uppercase",fontFamily:"inherit",transition:"all 0.2s",borderBottom:view===id?"2px solid #00D4FF":"2px solid transparent"}}>
               {label}
             </button>
           ))}
@@ -1002,9 +1048,9 @@ function App() {
       </main>
 
       {/* FOOTER */}
-      <footer style={{borderTop:"1px solid rgba(255,255,255,0.05)",padding:"14px 28px",display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:20}}>
-        <span style={{fontSize:9,color:"#1e2a3a",letterSpacing:"0.12em",textTransform:"uppercase"}}>NCP Storage Evaluator · NVIDIA DGX Cloud · Partner Selection Automation · MVP v1.1 + Load Testing</span>
-        <span style={{fontSize:9,color:"#1e2a3a",letterSpacing:"0.08em"}}>{partners.length} vendors · {useCase.toUpperCase()} profile · Built for Keith @ NVIDIA</span>
+      <footer style={{borderTop:"1px solid rgba(255,255,255,0.08)",padding:"14px 28px",display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:20,background:"rgba(0,0,0,0.2)"}}>
+        <span style={{fontSize:9,color:"#475569",letterSpacing:"0.12em",textTransform:"uppercase"}}>NCP Storage Evaluator · NVIDIA DGX Cloud · Partner Selection Automation · v1.1</span>
+        <span style={{fontSize:9,color:"#475569",letterSpacing:"0.08em"}}>{partners.length} vendors · {useCase.toUpperCase()} profile · Built for Keith @ NVIDIA</span>
       </footer>
     </div>
   );
