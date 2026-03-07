@@ -1257,7 +1257,7 @@ function ReviewQueue({submissions, onUpdateStatus, onSelectForScoring}) {
                     {sub.score ? <span style={{fontSize:14,fontWeight:900,color:sub.score>=8.5?"#34D399":sub.score>=7?"#FBBF24":"#F87171",fontFamily:"'Syne',sans-serif"}}>{sub.score}</span> : <span style={{fontSize:10,color:"#334155"}}>—</span>}
                   </td>
                   <td style={{padding:"12px 16px",borderBottom:"1px solid rgba(255,255,255,0.05)"}}>
-                    <div style={{display:"flex",gap:6"}}>
+                    <div style={{display:"flex",gap:6}}>
                       <select onChange={e=>{ if(e.target.value) onUpdateStatus(sub.id,e.target.value); e.target.value=""; }}
                         style={{background:"rgba(255,255,255,0.06)",border:"1px solid rgba(255,255,255,0.12)",borderRadius:5,padding:"3px 6px",color:"#94A3B8",fontSize:9,cursor:"pointer",fontFamily:"inherit"}}>
                         <option value="">Move to...</option>
@@ -1423,7 +1423,7 @@ function AIScoring({submission, onSave, onBack}) {
       {/* Scores editor */}
       {aiDone&&(
         <div style={{background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:14,padding:22}}>
-          <div style={{fontSize:10,letterSpacing:"0.18em",color:"#94A3B8",marginBottom:16,fontWeight:700,textTransform:"uppercase"}}>⚖️ Review & Adjust Scores <span style={{color:"#475569",fontWeight:400"}}>(AI suggested · reviewer can override)</span></div>
+          <div style={{fontSize:10,letterSpacing:"0.18em",color:"#94A3B8",marginBottom:16,fontWeight:700,textTransform:"uppercase"}}>⚖️ Review & Adjust Scores <span style={{color:"#475569",fontWeight:400}}>(AI suggested · reviewer can override)</span></div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
             {EVALUATION_CRITERIA.map((c,ci)=>{
               const conf = confidence[c.id]||80;
