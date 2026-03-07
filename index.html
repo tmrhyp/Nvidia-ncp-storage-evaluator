@@ -590,6 +590,363 @@ function AddPartner({onAdd}) {
   );
 }
 
+// ── LOAD TESTING VIEW ─────────────────────────────────────────────────────────
+
+const LOAD_TEST_PROFILES = [
+  { id:"llm_train", label:"LLM Training", icon:"🧠", desc:"Large model training — sequential reads, checkpoint writes", params:{ nodes:64, gpusPerNode:8, fileSize:256, concurrency:512, duration:300, pattern:"sequential", protocol:"NVMe-oF" } },
+  { id:"inference", label:"Inference Serving", icon:"⚡", desc:"Low-latency random reads for model serving at scale", params:{ nodes:16, gpusPerNode:8, fileSize:4, concurrency:1024, duration:120, pattern:"random", protocol:"NFS/RDMA" } },
+  { id:"checkpoint", label:"Checkpoint Save/Load", icon:"💾", desc:"Burst writes then reads — simulates training checkpoint cycle", params:{ nodes:32, gpusPerNode:8, fileSize:512, concurrency:256, duration:180, pattern:"burst", protocol:"NVMe-oF" } },
+  { id:"data_prep", label:"Data Preprocessing", icon:"🔄", desc:"High-throughput small file reads for dataset pipelines", params:{ nodes:8, gpusPerNode:4, fileSize:1, concurrency:2048, duration:240, pattern:"random", protocol:"NFS" } },
+];
+
+const BENCHMARK_TOOLS = [
+  { name:"FIO", desc:"Flexible I/O tester — industry standard", color:"#00D4FF", use:"Raw throughput & IOPS baseline" },
+  { name:"MLPerf Storage", desc:"NVIDIA-endorsed ML storage benchmark", color:"#7C3AED", use:"Training data pipeline simulation" },
+  { name:"NVIDIA DALI", desc:"GPU data loading pipeline benchmark", color:"#10B981", use:"GPU-Direct data ingestion rate" },
+  { name:"IOR", desc:"Parallel I/O benchmark (HPC standard)", color:"#F59E0B", use:"Multi-node concurrent throughput" },
+  { name:"NCCL Tests", desc:"Collective comms + storage overlap", color:"#EF4444", use:"All-reduce + storage contention" },
+  { name:"Custom TPM Script", desc:"NCP-specific validation suite", color:"#EC4899", use:"End-to-end partner acceptance test" },
+];
+
+function generateResults(profile, partner) {
+  const seed = partner.scores.performance * 10 + partner.scores.compatibility * 5;
+  const base = seed / 150;
+  const jitter = () => (Math.random() - 0.5) * 0.15;
+
+  const throughputs = Array.from({length:10}, (_,i) => {
+    const ramp = Math.min(1, (i+1)/4);
+    return Math.round((base * ramp + jitter()) * profile.params.nodes * 8.5 * 10) / 10;
+  });
+  const latencies = Array.from({length:10}, (_,i) => {
+    const load = i/9;
+    return Math.round((80 + load * 120 + jitter()*30) / (partner.scores.performance/10));
+  });
+  const iops = throughputs.map(t => Math.round(t * 1000 / profile.params.fileSize));
+
+  return {
+    throughputs,
+    latencies,
+    iops,
+    p50: Math.round(latencies[4] * 0.8),
+    p95: Math.round(latencies[7] * 1.3),
+    p99: Math.round(latencies[9] * 1.8),
+    maxThroughput: Math.max(...throughputs),
+    avgIOPS: Math.round(iops.reduce((a,b)=>a+b,0)/iops.length),
+    passRate: partner.scores.performance >= 8.5 ? 100 : partner.scores.performance >= 7.5 ? 87 : 72,
+  };
+}
+
+function MiniChart({data, color, label, unit, height=60}) {
+  const max = Math.max(...data), min = Math.min(...data);
+  const range = max - min || 1;
+  const w = 220, h = height;
+  const pts = data.map((v,i) => `${(i/(data.length-1))*w},${h - ((v-min)/range)*(h-8) - 4}`).join(" ");
+  return (
+    <div>
+      <div style={{fontSize:9,color:"#64748B",letterSpacing:"0.1em",marginBottom:4,textTransform:"uppercase"}}>{label}</div>
+      <svg width={w} height={h} style={{overflow:"visible"}}>
+        <defs>
+          <linearGradient id={`g${label.replace(/\s/g,"")}`} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={color} stopOpacity="0.3"/>
+            <stop offset="100%" stopColor={color} stopOpacity="0"/>
+          </linearGradient>
+        </defs>
+        <polygon points={`0,${h} ${pts} ${w},${h}`} fill={`url(#g${label.replace(/\s/g,"")})`}/>
+        <polyline points={pts} fill="none" stroke={color} strokeWidth="1.5" strokeLinejoin="round"/>
+        {data.map((v,i)=>(
+          <circle key={i} cx={(i/(data.length-1))*w} cy={h-((v-min)/range)*(h-8)-4} r="2.5" fill={color} opacity="0.7"/>
+        ))}
+      </svg>
+      <div style={{display:"flex",justifyContent:"space-between",fontSize:9,color:"#475569",marginTop:2}}>
+        <span>{min.toFixed(1)}{unit}</span>
+        <span style={{color,fontWeight:700}}>{max.toFixed(1)}{unit}</span>
+      </div>
+    </div>
+  );
+}
+
+function PassFailBar({value, label}) {
+  const color = value>=90?"#10B981":value>=75?"#FBBF24":"#EF4444";
+  return (
+    <div style={{marginBottom:8}}>
+      <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
+        <span style={{fontSize:10,color:"#94A3B8"}}>{label}</span>
+        <span style={{fontSize:11,fontWeight:700,color}}>{value}%</span>
+      </div>
+      <div style={{background:"rgba(255,255,255,0.06)",borderRadius:4,height:6,overflow:"hidden"}}>
+        <div style={{width:`${value}%`,height:"100%",background:color,borderRadius:4,transition:"width 0.8s cubic-bezier(.4,0,.2,1)"}}/>
+      </div>
+    </div>
+  );
+}
+
+function LoadTesting({partners}) {
+  const [profile, setProfile] = useState(LOAD_TEST_PROFILES[0]);
+  const [params, setParams] = useState({...LOAD_TEST_PROFILES[0].params});
+  const [running, setRunning] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [results, setResults] = useState(null);
+  const [phase, setPhase] = useState("");
+
+  const PHASES = ["Initializing test harness...","Provisioning storage mounts...","Warming up GPU nodes...","Running sequential throughput pass...","Running random IOPS pass...","Measuring latency percentiles...","Running burst stress test...","Collecting GPU-Direct metrics...","Analyzing results...","Generating report..."];
+
+  const selectProfile = (p) => { setProfile(p); setParams({...p.params}); setResults(null); setProgress(0); };
+
+  const runTest = () => {
+    setRunning(true); setProgress(0); setResults(null);
+    let p=0, phaseIdx=0;
+    const iv = setInterval(()=>{
+      p += Math.random()*12 + 3;
+      phaseIdx = Math.min(PHASES.length-1, Math.floor((p/100)*PHASES.length));
+      setProgress(Math.min(p,99));
+      setPhase(PHASES[phaseIdx]);
+      if(p>=100){
+        clearInterval(iv);
+        setProgress(100);
+        setPhase("✅ Test complete");
+        setRunning(false);
+        // Generate results for top 3 partners
+        const top3 = [...partners].sort((a,b)=>b.scores.performance-a.scores.performance).slice(0,3);
+        setResults(top3.map(partner=>({partner, data:generateResults(profile,partner)})));
+      }
+    }, 280);
+  };
+
+  return (
+    <div className="page-enter" style={{display:"flex",flexDirection:"column",gap:22}}>
+      <div>
+        <h1 style={{fontSize:20,fontWeight:900,color:"#F1F5F9",fontFamily:"'Syne',sans-serif"}}>🔥 Load Testing & Validation</h1>
+        <p style={{fontSize:11,color:"#64748B",marginTop:4}}>Simulate real DGX Cloud workloads against shortlisted storage partners — validate before you commit</p>
+      </div>
+
+      {/* Test Profile Selector */}
+      <Card>
+        <SectionTitle>Select Workload Profile</SectionTitle>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10}}>
+          {LOAD_TEST_PROFILES.map(p=>(
+            <div key={p.id} onClick={()=>selectProfile(p)} style={{padding:"14px",borderRadius:9,border:`1px solid ${profile.id===p.id?"rgba(0,212,255,0.4)":"rgba(255,255,255,0.07)"}`,background:profile.id===p.id?"rgba(0,212,255,0.07)":"rgba(255,255,255,0.02)",cursor:"pointer",transition:"all 0.2s"}}>
+              <div style={{fontSize:22,marginBottom:6}}>{p.icon}</div>
+              <div style={{fontSize:11,fontWeight:700,color:profile.id===p.id?"#00D4FF":"#E2E8F0"}}>{p.label}</div>
+              <div style={{fontSize:9,color:"#64748B",marginTop:4,lineHeight:1.5}}>{p.desc}</div>
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      {/* Parameters */}
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
+        <Card>
+          <SectionTitle>⚙️ Test Parameters</SectionTitle>
+          <div style={{display:"flex",flexDirection:"column",gap:14}}>
+            {[
+              {key:"nodes",label:"GPU Nodes",min:1,max:256,unit:"nodes"},
+              {key:"gpusPerNode",label:"GPUs per Node",min:1,max:8,unit:"GPUs"},
+              {key:"fileSize",label:"File Size",min:1,max:1024,unit:"GB"},
+              {key:"concurrency",label:"Concurrency",min:1,max:4096,unit:"threads"},
+              {key:"duration",label:"Test Duration",min:30,max:600,unit:"sec"},
+            ].map(({key,label,min,max,unit})=>(
+              <div key={key}>
+                <div style={{display:"flex",justifyContent:"space-between",marginBottom:5}}>
+                  <span style={{fontSize:10,color:"#94A3B8"}}>{label}</span>
+                  <span style={{fontSize:11,fontWeight:700,color:"#00D4FF",fontFamily:"'Syne',sans-serif"}}>{params[key]} {unit}</span>
+                </div>
+                <input type="range" min={min} max={max} value={params[key]} onChange={e=>setParams(p=>({...p,[key]:+e.target.value}))} style={{width:"100%",accentColor:"#00D4FF"}}/>
+              </div>
+            ))}
+            <div>
+              <div style={{fontSize:10,color:"#94A3B8",marginBottom:6}}>I/O Pattern</div>
+              <div style={{display:"flex",gap:6}}>
+                {["sequential","random","burst","mixed"].map(pat=>(
+                  <button key={pat} onClick={()=>setParams(p=>({...p,pattern:pat}))} style={{padding:"4px 10px",borderRadius:5,border:`1px solid ${params.pattern===pat?"rgba(0,212,255,0.4)":"rgba(255,255,255,0.1)"}`,background:params.pattern===pat?"rgba(0,212,255,0.12)":"transparent",color:params.pattern===pat?"#00D4FF":"#64748B",fontSize:9,cursor:"pointer",fontFamily:"inherit",fontWeight:700,textTransform:"uppercase"}}>
+                    {pat}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <div style={{fontSize:10,color:"#94A3B8",marginBottom:6}}>Protocol</div>
+              <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                {["NVMe-oF","NFS/RDMA","NFS","S3","POSIX"].map(proto=>(
+                  <button key={proto} onClick={()=>setParams(p=>({...p,protocol:proto}))} style={{padding:"4px 10px",borderRadius:5,border:`1px solid ${params.protocol===proto?"rgba(124,58,237,0.5)":"rgba(255,255,255,0.1)"}`,background:params.protocol===proto?"rgba(124,58,237,0.12)":"transparent",color:params.protocol===proto?"#7C3AED":"#64748B",fontSize:9,cursor:"pointer",fontFamily:"inherit",fontWeight:700}}>
+                    {proto}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </Card>
+
+        <Card>
+          <SectionTitle>🛠️ Benchmark Tools</SectionTitle>
+          <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:16}}>
+            {BENCHMARK_TOOLS.map(t=>(
+              <div key={t.name} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 10px",borderRadius:7,background:"rgba(255,255,255,0.02)",border:"1px solid rgba(255,255,255,0.05)"}}>
+                <Tag color={t.color}>{t.name}</Tag>
+                <div style={{flex:1}}>
+                  <div style={{fontSize:10,fontWeight:600,color:"#E2E8F0"}}>{t.use}</div>
+                  <div style={{fontSize:9,color:"#64748B"}}>{t.desc}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div style={{background:"rgba(255,255,255,0.02)",borderRadius:8,padding:"12px",border:"1px solid rgba(255,255,255,0.06)"}}>
+            <div style={{fontSize:9,color:"#64748B",letterSpacing:"0.1em",marginBottom:8,fontWeight:700}}>TEST SUMMARY</div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}}>
+              {[
+                ["Profile",profile.label],
+                ["Nodes",`${params.nodes} × ${params.gpusPerNode} GPUs`],
+                ["Pattern",params.pattern.toUpperCase()],
+                ["Protocol",params.protocol],
+                ["File Size",`${params.fileSize} GB`],
+                ["Duration",`${params.duration}s`],
+              ].map(([k,v])=>(
+                <div key={k}>
+                  <div style={{fontSize:8,color:"#475569",letterSpacing:"0.08em"}}>{k.toUpperCase()}</div>
+                  <div style={{fontSize:10,fontWeight:700,color:"#00D4FF"}}>{v}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </Card>
+      </div>
+
+      {/* Run Button + Progress */}
+      <Card highlight>
+        <div style={{display:"flex",alignItems:"center",gap:16,flexWrap:"wrap"}}>
+          <Btn onClick={runTest} disabled={running} style={{minWidth:200}}>
+            {running?"⏳ Running Test...":"▶ Run Load Test"}
+          </Btn>
+          {(running||progress>0)&&(
+            <div style={{flex:1,minWidth:200}}>
+              <div style={{display:"flex",justifyContent:"space-between",marginBottom:5}}>
+                <span style={{fontSize:10,color:"#64748B"}}>{phase}</span>
+                <span style={{fontSize:11,fontWeight:700,color:"#00D4FF"}}>{Math.round(progress)}%</span>
+              </div>
+              <div style={{background:"rgba(255,255,255,0.06)",borderRadius:4,height:6,overflow:"hidden"}}>
+                <div style={{width:`${progress}%`,height:"100%",background:"linear-gradient(90deg,#00D4FF,#7C3AED)",borderRadius:4,transition:"width 0.3s ease"}}/>
+              </div>
+            </div>
+          )}
+        </div>
+      </Card>
+
+      {/* Results */}
+      {results&&(
+        <div style={{display:"flex",flexDirection:"column",gap:16}}>
+          <div style={{fontSize:14,fontWeight:900,color:"#F1F5F9",fontFamily:"'Syne',sans-serif"}}>📊 Test Results — {profile.label} · {params.nodes} Nodes · {params.protocol}</div>
+
+          {/* Winner banner */}
+          <Card style={{background:"rgba(255,215,0,0.04)",borderColor:"rgba(255,215,0,0.2)"}}>
+            <div style={{display:"flex",alignItems:"center",gap:16}}>
+              <div style={{fontSize:32}}>🏆</div>
+              <div>
+                <div style={{fontSize:9,color:"#FFD700",letterSpacing:"0.15em",fontWeight:700,marginBottom:4}}>TOP PERFORMER — {profile.label.toUpperCase()}</div>
+                <div style={{fontSize:18,fontWeight:900,color:"#F1F5F9",fontFamily:"'Syne',sans-serif"}}>{results[0].partner.name}</div>
+                <div style={{fontSize:11,color:"#94A3B8",marginTop:2}}>
+                  Peak {results[0].data.maxThroughput} GB/s · {results[0].data.avgIOPS.toLocaleString()} avg IOPS · p99 latency {results[0].data.p99}µs
+                </div>
+              </div>
+              <div style={{marginLeft:"auto",textAlign:"center"}}>
+                <div style={{fontSize:28,fontWeight:900,color:"#10B981",fontFamily:"'Syne',sans-serif"}}>{results[0].data.passRate}%</div>
+                <div style={{fontSize:9,color:"#64748B",letterSpacing:"0.1em"}}>PASS RATE</div>
+              </div>
+            </div>
+          </Card>
+
+          {/* Per-partner results */}
+          <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:14}}>
+            {results.map(({partner,data},ri)=>(
+              <Card key={partner.id} style={{borderColor:partner.color+"44"}}>
+                <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>
+                  <div style={{width:30,height:30,borderRadius:7,background:partner.color+"22",border:`1px solid ${partner.color}44`,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:900,color:partner.color,fontSize:13}}>{partner.logo}</div>
+                  <div>
+                    <div style={{fontWeight:700,fontSize:12,color:"#F1F5F9"}}>{partner.name}</div>
+                    <div style={{fontSize:9,color:"#64748B"}}>{["🥇 Top Performer","🥈 Runner Up","🥉 Baseline"][ri]}</div>
+                  </div>
+                </div>
+
+                {/* KPI row */}
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6,marginBottom:14}}>
+                  {[
+                    {label:"Peak GB/s",value:data.maxThroughput},
+                    {label:"Avg IOPS",value:(data.avgIOPS/1000).toFixed(1)+"K"},
+                    {label:"p50 µs",value:data.p50},
+                  ].map(m=>(
+                    <div key={m.label} style={{background:"rgba(255,255,255,0.03)",borderRadius:6,padding:"8px",textAlign:"center"}}>
+                      <div style={{fontSize:14,fontWeight:900,color:partner.color,fontFamily:"'Syne',sans-serif"}}>{m.value}</div>
+                      <div style={{fontSize:8,color:"#475569",marginTop:2,letterSpacing:"0.08em"}}>{m.label}</div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Charts */}
+                <div style={{display:"flex",flexDirection:"column",gap:12,marginBottom:14}}>
+                  <MiniChart data={data.throughputs} color={partner.color} label="Throughput GB/s" unit=" GB/s" height={50}/>
+                  <MiniChart data={data.latencies} color="#EF4444" label="Latency µs" unit="µs" height={50}/>
+                </div>
+
+                {/* Latency percentiles */}
+                <div style={{background:"rgba(255,255,255,0.02)",borderRadius:7,padding:"10px",marginBottom:12}}>
+                  <div style={{fontSize:9,color:"#64748B",letterSpacing:"0.1em",marginBottom:8,fontWeight:700}}>LATENCY PERCENTILES</div>
+                  {[["p50",data.p50],["p95",data.p95],["p99",data.p99]].map(([p,v])=>(
+                    <div key={p} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"3px 0"}}>
+                      <span style={{fontSize:9,color:"#64748B",fontWeight:700}}>{p}</span>
+                      <div style={{flex:1,margin:"0 10px",background:"rgba(255,255,255,0.05)",borderRadius:3,height:4,overflow:"hidden"}}>
+                        <div style={{width:`${Math.min(100,(v/500)*100)}%`,height:"100%",background:v<100?"#10B981":v<200?"#FBBF24":"#EF4444"}}/>
+                      </div>
+                      <span style={{fontSize:10,fontWeight:700,color:v<100?"#10B981":v<200?"#FBBF24":"#EF4444"}}>{v}µs</span>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Pass rates */}
+                <PassFailBar value={data.passRate} label="Overall Pass Rate"/>
+                <PassFailBar value={Math.round(data.passRate*0.95)} label="GPU-Direct Throughput SLA"/>
+                <PassFailBar value={Math.round(data.passRate*1.02)} label="Latency SLA (p99 < 300µs)"/>
+              </Card>
+            ))}
+          </div>
+
+          {/* Acceptance criteria table */}
+          <Card>
+            <SectionTitle>✅ NCP Acceptance Criteria — Go / No-Go</SectionTitle>
+            <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
+              <thead>
+                <tr style={{background:"rgba(255,255,255,0.04)"}}>
+                  {["Criterion","Threshold","WekaFS","VAST Data","DDN EXAScaler"].map(h=>(
+                    <th key={h} style={{padding:"10px 14px",textAlign:"left",color:"#64748B",fontSize:9,letterSpacing:"0.1em",fontWeight:700,borderBottom:"1px solid rgba(255,255,255,0.08)"}}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {[
+                  ["Sequential Throughput",`≥ ${Math.round(params.nodes*2)} GB/s`, true, true, true],
+                  ["Random IOPS",`≥ ${Math.round(params.concurrency*500/1000)}K IOPS`, true, true, false],
+                  ["p99 Latency","≤ 300µs", true, true, false],
+                  ["GPU-Direct RDMA","Required", true, true, true],
+                  ["NVMe-oF Support","Required", true, false, true],
+                  ["Multi-tenant Isolation","Required", true, true, true],
+                  ["Auto-failover < 30s","Required", false, true, true],
+                ].map(([criterion, threshold, ...vals],ri)=>(
+                  <tr key={criterion} style={{background:ri%2===0?"rgba(255,255,255,0.01)":"transparent"}}>
+                    <td style={{padding:"9px 14px",fontSize:11,color:"#E2E8F0",borderBottom:"1px solid rgba(255,255,255,0.04)"}}>{criterion}</td>
+                    <td style={{padding:"9px 14px",fontSize:10,color:"#64748B",borderBottom:"1px solid rgba(255,255,255,0.04)"}}>{threshold}</td>
+                    {vals.map((pass,vi)=>(
+                      <td key={vi} style={{padding:"9px 14px",textAlign:"center",borderBottom:"1px solid rgba(255,255,255,0.04)"}}>
+                        <span style={{fontSize:14,color:pass?"#10B981":"#EF4444"}}>{pass?"✅":"❌"}</span>
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </Card>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── ROOT APP ──────────────────────────────────────────────────────────────────
 
 function App() {
@@ -605,7 +962,7 @@ function App() {
 
   const addPartner = (p) => { setPartners(prev=>[...prev,p]); showToast(`✅ ${p.name} added to evaluation`); setView("dashboard"); };
 
-  const NAVS = [["dashboard","📊 Dashboard"],["evaluate","⚖️ Weights"],["compare","🔬 Compare"],["workflow","🤖 Automation"],["add","➕ Add Partner"]];
+  const NAVS = [["dashboard","📊 Dashboard"],["evaluate","⚖️ Weights"],["compare","🔬 Compare"],["workflow","🤖 Automation"],["loadtest","🔥 Load Test"],["add","➕ Add Partner"]];
 
   return (
     <div style={{fontFamily:"'IBM Plex Mono',monospace",background:"#060910",minHeight:"100vh",color:"#E2E8F0"}}>
@@ -640,12 +997,13 @@ function App() {
         {view==="evaluate"&&<WeightEngine weights={weights} setWeights={setWeights} useCase={useCase} setUseCase={setUseCase}/>}
         {view==="compare"&&<Compare partners={partners} weights={weights}/>}
         {view==="workflow"&&<Workflow/>}
+        {view==="loadtest"&&<LoadTesting partners={partners}/>}
         {view==="add"&&<AddPartner onAdd={addPartner}/>}
       </main>
 
       {/* FOOTER */}
       <footer style={{borderTop:"1px solid rgba(255,255,255,0.05)",padding:"14px 28px",display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:20}}>
-        <span style={{fontSize:9,color:"#1e2a3a",letterSpacing:"0.12em",textTransform:"uppercase"}}>NCP Storage Evaluator · NVIDIA DGX Cloud · Partner Selection Automation · MVP v1.0</span>
+        <span style={{fontSize:9,color:"#1e2a3a",letterSpacing:"0.12em",textTransform:"uppercase"}}>NCP Storage Evaluator · NVIDIA DGX Cloud · Partner Selection Automation · MVP v1.1 + Load Testing</span>
         <span style={{fontSize:9,color:"#1e2a3a",letterSpacing:"0.08em"}}>{partners.length} vendors · {useCase.toUpperCase()} profile · Built for Keith @ NVIDIA</span>
       </footer>
     </div>
