@@ -1831,72 +1831,101 @@ function App() {
       )}
 
       {/* HEADER — different for vendor vs NVIDIA */}
-      <header style={{background: isVendor ? "rgba(10,20,15,0.95)" : "rgba(13,17,23,0.95)", borderBottom:`1px solid ${isVendor?"rgba(52,211,153,0.2)":"rgba(255,255,255,0.1)"}`, padding: isVendor ? "0 28px" : "0", position:"sticky",top:0,zIndex:100,backdropFilter:"blur(20px)",boxShadow:"0 4px 32px rgba(0,0,0,0.5)"}}>
+      <header style={{
+        background: isVendor ? "rgba(8,18,13,0.97)" : "rgba(10,14,20,0.97)",
+        borderBottom: `1px solid ${isVendor?"rgba(52,211,153,0.12)":"rgba(0,212,255,0.08)"}`,
+        position:"sticky", top:0, zIndex:100,
+        backdropFilter:"blur(28px)",
+        boxShadow:"0 8px 48px rgba(0,0,0,0.7)"
+      }}>
 
-        {/* Top row — logo + badge + switch */}
-        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0 28px",height:54}}>
-          <div style={{display:"flex",alignItems:"center",gap:14}}>
-            <div style={{width:34,height:34,background: isVendor ? "linear-gradient(135deg,#34D399,#059669)" : "linear-gradient(135deg,#00D4FF,#7C3AED)",borderRadius:10,display:"flex",alignItems:"center",justifyContent:"center",fontSize:17,fontWeight:900,color:"#fff",boxShadow: isVendor ? "0 0 20px rgba(52,211,153,0.45)" : "0 0 20px rgba(0,212,255,0.45)"}}>N</div>
+        {/* Top row */}
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0 32px",height:58,borderBottom:"1px solid rgba(255,255,255,0.05)"}}>
+          <div style={{display:"flex",alignItems:"center",gap:12}}>
+            <div style={{width:36,height:36,background: isVendor ? "linear-gradient(135deg,#34D399,#059669)" : "linear-gradient(135deg,#00D4FF,#7C3AED)",borderRadius:10,display:"flex",alignItems:"center",justifyContent:"center",fontSize:17,fontWeight:900,color:"#fff",flexShrink:0,boxShadow: isVendor ? "0 0 0 1px rgba(52,211,153,0.3),0 0 20px rgba(52,211,153,0.3)" : "0 0 0 1px rgba(0,212,255,0.3),0 0 20px rgba(0,212,255,0.25)"}}>N</div>
             <div>
-              <div style={{fontSize:13,fontWeight:700,letterSpacing:"0.1em",textTransform:"uppercase",color:"#F1F5F9",fontFamily:"'Syne',sans-serif"}}>
+              <div style={{fontSize:14,fontWeight:900,letterSpacing:"0.08em",textTransform:"uppercase",color:"#F8FAFC",fontFamily:"'Syne',sans-serif",lineHeight:1.1}}>
                 {isVendor ? "NCP Partner Portal" : "NCP Storage Evaluator"}
               </div>
-              <div style={{fontSize:9,letterSpacing:"0.14em",textTransform:"uppercase",marginTop:1,color: isVendor ? "rgba(52,211,153,0.6)" : "#64748B"}}>
+              <div style={{fontSize:9,letterSpacing:"0.14em",textTransform:"uppercase",marginTop:3,color: isVendor ? "rgba(52,211,153,0.5)" : "rgba(0,212,255,0.4)"}}>
                 {isVendor ? "NVIDIA DGX Cloud · Storage Partner Application" : "NVIDIA DGX Cloud · Internal · Storage Team"}
               </div>
             </div>
-            <div style={{marginLeft:6,padding:"3px 9px",borderRadius:5,background: isVendor ? "rgba(52,211,153,0.12)" : "rgba(239,68,68,0.12)",border:`1px solid ${isVendor?"rgba(52,211,153,0.3)":"rgba(239,68,68,0.3)"}`,fontSize:8,fontWeight:700,letterSpacing:"0.1em",color: isVendor ? "#34D399" : "#F87171",textTransform:"uppercase"}}>
+            <div style={{padding:"3px 10px",borderRadius:20,background: isVendor ? "rgba(52,211,153,0.1)" : "rgba(239,68,68,0.1)",border:`1px solid ${isVendor?"rgba(52,211,153,0.25)":"rgba(239,68,68,0.25)"}`,fontSize:8,fontWeight:700,letterSpacing:"0.14em",color: isVendor ? "#34D399" : "#F87171",textTransform:"uppercase",whiteSpace:"nowrap"}}>
               {isVendor ? "🌐 Public" : "🔒 Internal"}
             </div>
           </div>
-          <button onClick={()=>{ setRole(null); setView("dashboard"); }} style={{padding:"6px 14px",borderRadius:7,border:"1px solid rgba(255,255,255,0.25)",background:"rgba(255,255,255,0.1)",color:"#CBD5E1",cursor:"pointer",fontSize:10,fontWeight:700,letterSpacing:"0.08em",textTransform:"uppercase",fontFamily:"inherit",transition:"all 0.2s"}}>
-            ⇄ Switch Role
+          <button
+            onClick={()=>{ setRole(null); setView("dashboard"); }}
+            onMouseEnter={e=>{e.currentTarget.style.background="rgba(255,255,255,0.1)";e.currentTarget.style.borderColor="rgba(255,255,255,0.25)";e.currentTarget.style.color="#E2E8F0";}}
+            onMouseLeave={e=>{e.currentTarget.style.background="rgba(255,255,255,0.04)";e.currentTarget.style.borderColor="rgba(255,255,255,0.12)";e.currentTarget.style.color="#64748B";}}
+            style={{padding:"7px 16px",borderRadius:8,border:"1px solid rgba(255,255,255,0.12)",background:"rgba(255,255,255,0.04)",color:"#64748B",cursor:"pointer",fontSize:10,fontWeight:700,letterSpacing:"0.1em",textTransform:"uppercase",fontFamily:"inherit",transition:"all 0.18s",display:"flex",alignItems:"center",gap:7}}>
+            <span style={{fontSize:13,lineHeight:1}}>⇄</span> Switch Role
           </button>
         </div>
 
-        {/* Nav row — full width for internal, inline for vendor */}
+        {/* Nav row */}
         {isVendor ? (
-          <div style={{padding:"0 28px 10px",display:"flex",gap:6}}>
+          <div style={{padding:"10px 32px",display:"flex",gap:4}}>
             {NAVS.map(([id,label])=>(
-              <button key={id} onClick={()=>setView(id)} style={{padding:"6px 16px",borderRadius:7,border:`1px solid ${view===id?"rgba(52,211,153,0.4)":"rgba(255,255,255,0.08)"}`,background:view===id?"rgba(52,211,153,0.12)":"rgba(255,255,255,0.03)",color:view===id?"#34D399":"#94A3B8",cursor:"pointer",fontSize:10,fontWeight:700,letterSpacing:"0.06em",textTransform:"uppercase",fontFamily:"inherit",transition:"all 0.2s"}}>
+              <button key={id} onClick={()=>setView(id)}
+                style={{padding:"7px 18px",borderRadius:8,border:`1px solid ${view===id?"rgba(52,211,153,0.35)":"rgba(255,255,255,0.07)"}`,background:view===id?"rgba(52,211,153,0.1)":"rgba(255,255,255,0.03)",color:view===id?"#34D399":"#64748B",cursor:"pointer",fontSize:10,fontWeight:700,letterSpacing:"0.06em",textTransform:"uppercase",fontFamily:"inherit",transition:"all 0.2s"}}>
                 {label}
               </button>
             ))}
           </div>
         ) : (
-          <div style={{borderTop:"1px solid rgba(255,255,255,0.07)",background:"rgba(0,0,0,0.25)",padding:"8px 28px",display:"flex",alignItems:"center",gap:16}}>
-            {/* Evaluation group */}
-            <div style={{display:"flex",alignItems:"center",gap:6}}>
-              <div style={{display:"flex",alignItems:"center",gap:5,padding:"3px 10px 3px 8px",borderRadius:6,background:"rgba(0,212,255,0.07)",border:"1px solid rgba(0,212,255,0.15)"}}>
-                <span style={{fontSize:8,color:"#67E8F9",letterSpacing:"0.14em",textTransform:"uppercase",fontWeight:800,whiteSpace:"nowrap"}}>⚡ Evaluation</span>
+          <div style={{padding:"8px 32px 10px",display:"flex",alignItems:"center",gap:10}}>
+
+            {/* ── EVALUATION card ── */}
+            <div style={{display:"flex",flexDirection:"column",gap:5,background:"rgba(0,212,255,0.04)",border:"1px solid rgba(0,212,255,0.1)",borderRadius:12,padding:"7px 10px 7px 14px",position:"relative",overflow:"hidden"}}>
+              <div style={{position:"absolute",top:0,left:16,right:16,height:1,background:"linear-gradient(90deg,transparent,rgba(0,212,255,0.5),transparent)"}}/>
+              <div style={{display:"flex",alignItems:"center",gap:6}}>
+                <div style={{width:4,height:4,borderRadius:"50%",background:"#00D4FF",boxShadow:"0 0 8px rgba(0,212,255,0.8)"}}/>
+                <span style={{fontSize:8,color:"rgba(103,232,249,0.7)",letterSpacing:"0.2em",textTransform:"uppercase",fontWeight:700,userSelect:"none",pointerEvents:"none"}}>Evaluation</span>
               </div>
-              <div style={{display:"flex",alignItems:"center",gap:2,background:"rgba(255,255,255,0.04)",borderRadius:8,padding:"3px"}}>
-                {[["dashboard","📊","Dashboard"],["evaluate","⚖️","Weights"],["compare","🔬","Compare"],["workflow","🤖","Automation"],["loadtest","🔥","Load Test"]].map(([id,icon,label])=>(
-                  <button key={id} onClick={()=>setView(id)}
-                    style={{padding:"5px 12px",borderRadius:6,border:"none",background:view===id?"rgba(0,212,255,0.18)":"transparent",color:view===id?"#67E8F9":"#94A3B8",cursor:"pointer",fontSize:10,fontWeight:view===id?800:500,letterSpacing:"0.04em",fontFamily:"inherit",transition:"all 0.15s",whiteSpace:"nowrap",boxShadow:view===id?"0 0 12px rgba(0,212,255,0.15)":"none"}}>
-                    {icon} {label}
-                  </button>
-                ))}
+              <div style={{display:"flex",alignItems:"center",gap:2}}>
+                {[["dashboard","📊","Dashboard"],["evaluate","⚖️","Weights"],["compare","🔬","Compare"],["workflow","🤖","Automation"],["loadtest","🔥","Load Test"]].map(([id,icon,lbl])=>{
+                  const active = view===id;
+                  return (
+                    <button key={id} onClick={()=>setView(id)}
+                      onMouseEnter={e=>{ if(!active){e.currentTarget.style.background="rgba(0,212,255,0.08)";e.currentTarget.style.color="#CBD5E1";}}}
+                      onMouseLeave={e=>{ if(!active){e.currentTarget.style.background="transparent";e.currentTarget.style.color="#64748B";}}}
+                      style={{padding:"5px 11px",borderRadius:7,border:"none",background:active?"rgba(0,212,255,0.16)":"transparent",color:active?"#67E8F9":"#64748B",cursor:"pointer",fontSize:10,fontWeight:active?700:500,fontFamily:"inherit",transition:"all 0.15s",whiteSpace:"nowrap",outline:active?"1px solid rgba(0,212,255,0.22)":"none",boxShadow:active?"0 0 14px rgba(0,212,255,0.18),inset 0 1px 0 rgba(0,212,255,0.12)":"none"}}>
+                      <span style={{marginRight:5}}>{icon}</span>{lbl}
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
-            {/* Divider */}
-            <div style={{width:1,height:28,background:"rgba(255,255,255,0.1)",flexShrink:0}}/>
+            {/* dotted separator */}
+            <div style={{display:"flex",flexDirection:"column",gap:4,alignSelf:"center",opacity:0.25}}>
+              {[0,1,2,3].map(i=><div key={i} style={{width:2,height:2,borderRadius:"50%",background:"#94A3B8"}}/>)}
+            </div>
 
-            {/* Partner Intake group */}
-            <div style={{display:"flex",alignItems:"center",gap:6}}>
-              <div style={{display:"flex",alignItems:"center",gap:5,padding:"3px 10px 3px 8px",borderRadius:6,background:"rgba(167,139,250,0.08)",border:"1px solid rgba(167,139,250,0.2)"}}>
-                <span style={{fontSize:8,color:"#C4B5FD",letterSpacing:"0.14em",textTransform:"uppercase",fontWeight:800,whiteSpace:"nowrap"}}>📋 Partner Intake</span>
+            {/* ── PARTNER INTAKE card ── */}
+            <div style={{display:"flex",flexDirection:"column",gap:5,background:"rgba(167,139,250,0.04)",border:"1px solid rgba(167,139,250,0.12)",borderRadius:12,padding:"7px 10px 7px 14px",position:"relative",overflow:"hidden"}}>
+              <div style={{position:"absolute",top:0,left:16,right:16,height:1,background:"linear-gradient(90deg,transparent,rgba(167,139,250,0.5),transparent)"}}/>
+              <div style={{display:"flex",alignItems:"center",gap:6}}>
+                <div style={{width:4,height:4,borderRadius:"50%",background:"#A78BFA",boxShadow:"0 0 8px rgba(167,139,250,0.8)"}}/>
+                <span style={{fontSize:8,color:"rgba(196,181,253,0.7)",letterSpacing:"0.2em",textTransform:"uppercase",fontWeight:700,userSelect:"none",pointerEvents:"none"}}>Partner Intake</span>
               </div>
-              <div style={{display:"flex",alignItems:"center",gap:2,background:"rgba(255,255,255,0.04)",borderRadius:8,padding:"3px"}}>
-                {[["queue","📋","Review Queue"],["scoring","🤖","AI Scoring"],["audit","📁","Audit & Export"]].map(([id,icon,label])=>(
-                  <button key={id} onClick={()=>setView(id)}
-                    style={{padding:"5px 12px",borderRadius:6,border:"none",background:view===id?"rgba(167,139,250,0.18)":"transparent",color:view===id?"#C4B5FD":"#94A3B8",cursor:"pointer",fontSize:10,fontWeight:view===id?800:500,letterSpacing:"0.04em",fontFamily:"inherit",transition:"all 0.15s",whiteSpace:"nowrap",boxShadow:view===id?"0 0 12px rgba(167,139,250,0.15)":"none"}}>
-                    {icon} {label}
-                  </button>
-                ))}
+              <div style={{display:"flex",alignItems:"center",gap:2}}>
+                {[["queue","📋","Review Queue"],["scoring","🤖","AI Scoring"],["audit","📁","Audit & Export"]].map(([id,icon,lbl])=>{
+                  const active = view===id;
+                  return (
+                    <button key={id} onClick={()=>setView(id)}
+                      onMouseEnter={e=>{ if(!active){e.currentTarget.style.background="rgba(167,139,250,0.1)";e.currentTarget.style.color="#CBD5E1";}}}
+                      onMouseLeave={e=>{ if(!active){e.currentTarget.style.background="transparent";e.currentTarget.style.color="#64748B";}}}
+                      style={{padding:"5px 11px",borderRadius:7,border:"none",background:active?"rgba(167,139,250,0.16)":"transparent",color:active?"#C4B5FD":"#64748B",cursor:"pointer",fontSize:10,fontWeight:active?700:500,fontFamily:"inherit",transition:"all 0.15s",whiteSpace:"nowrap",outline:active?"1px solid rgba(167,139,250,0.22)":"none",boxShadow:active?"0 0 14px rgba(167,139,250,0.18),inset 0 1px 0 rgba(167,139,250,0.12)":"none"}}>
+                      <span style={{marginRight:5}}>{icon}</span>{lbl}
+                    </button>
+                  );
+                })}
               </div>
             </div>
+
           </div>
         )}
       </header>
